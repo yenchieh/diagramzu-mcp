@@ -1,0 +1,26 @@
+{
+  "name": "@diagramzu/mcp",
+  "version": "0.0.1",
+  "private": true,
+  "description": "MCP server for diagramzu.ai — read/write diagrams in your Space from Claude, Cursor, ChatGPT, or any MCP client.",
+  "type": "module",
+  "bin": {
+    "diagramzu-mcp": "./dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
