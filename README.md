@@ -1,6 +1,6 @@
 # @diagramzu/mcp
 
-MCP server for [diagramzu.ai](http://192.241.157.36). Lets Claude Code, Cursor, ChatGPT custom GPTs, and any MCP client read and write diagrams in your Space.
+MCP server for [diagramzu.ai](https://diagramzu.ai). Lets Claude Code, Cursor, ChatGPT custom GPTs, and any MCP client read and write diagrams in your Space.
 
 ## Setup
 
@@ -18,7 +18,7 @@ MCP server for [diagramzu.ai](http://192.241.157.36). Lets Claude Code, Cursor, 
 
    ```bash
    claude mcp add diagramzu \
-     --env DIAGRAMZU_BASE_URL=http://192.241.157.36 \
+     --env DIAGRAMZU_BASE_URL=https://diagramzu.ai \
      --env DIAGRAMZU_API_TOKEN=dz_live_xxx \
      --env DIAGRAMZU_SPACE_ID=org_xxx \
      -- node /absolute/path/to/packages/mcp-diagramzu/dist/index.js
