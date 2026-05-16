@@ -2,27 +2,45 @@
 
 MCP server for [diagramzu.ai](https://diagramzu.ai). Lets Claude Code, Cursor, ChatGPT custom GPTs, and any MCP client read and write diagrams in your Space.
 
-## Setup
+## Use the hosted server (recommended)
 
-1. Create an API token at `https://YOUR_DOMAIN/app/settings/tokens`. Copy the plaintext immediately.
-2. Note your Space ID (the Clerk Organization ID, like `org_xxx`) — visible in the URL when you're in `/app/d/...`.
-3. Build the server:
+You do not need to clone or build this package. diagramzu hosts a remote MCP
+server. You only need an API token (`dz_live_…`) from
+`https://diagramzu.ai/app/settings/tokens` — the space is derived from the
+token.
 
-   ```bash
-   cd packages/mcp-diagramzu
-   pnpm install
-   pnpm run build
-   ```
+```bash
+claude mcp add --transport http diagramzu https://diagramzu.ai/mcp \
+  --header "Authorization: Bearer dz_live_xxx"
+```
 
-4. Add to your Claude Code config:
+Claude Desktop / Cursor: add an `http`-type server in your MCP config:
 
-   ```bash
-   claude mcp add diagramzu \
-     --env DIAGRAMZU_BASE_URL=https://diagramzu.ai \
-     --env DIAGRAMZU_API_TOKEN=dz_live_xxx \
-     --env DIAGRAMZU_SPACE_ID=org_xxx \
-     -- node /absolute/path/to/packages/mcp-diagramzu/dist/index.js
-   ```
+```json
+{
+  "mcpServers": {
+    "diagramzu": {
+      "type": "http",
+      "url": "https://diagramzu.ai/mcp",
+      "headers": { "Authorization": "Bearer dz_live_xxx" }
+    }
+  }
+}
+```
+
+Full reference: **https://diagramzu.ai/docs**.
+
+## Local development (this repo)
+
+This stdio package is kept for hacking on diagramzu itself:
+
+```bash
+cd packages/mcp-diagramzu
+pnpm install
+pnpm run build
+# point your client at node dist/index.js with
+# DIAGRAMZU_BASE_URL / DIAGRAMZU_API_TOKEN / DIAGRAMZU_SPACE_ID
+```
 
 ## Tools
 
