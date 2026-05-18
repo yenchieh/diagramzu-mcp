@@ -90,7 +90,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
   server.registerTool(
     "update_diagram",
     {
-      description: "Update an existing diagram's title and/or mermaid source.",
+      description: "Update an existing diagram's title, mermaid source, and/or visual style preset.",
       inputSchema: {
         type: "object",
         properties: {
