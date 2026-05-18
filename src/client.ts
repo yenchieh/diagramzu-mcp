@@ -50,14 +50,14 @@ export class DiagramzuClient {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`);
   }
 
-  create(body: { title?: string; code?: string; style?: string }): Promise<{ diagram: Diagram }> {
+  create(body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown> }): Promise<{ diagram: Diagram }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   }
 
-  update(id: string, body: { title?: string; code?: string; style?: string }): Promise<{ diagram: Diagram }> {
+  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown> }): Promise<{ diagram: Diagram }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),

@@ -69,15 +69,35 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             description:
               "Visual preset: midnight (default dark), paper, forest, ocean, mono. Omit to use the default.",
           },
+          styleOptions: {
+            type: "object",
+            description:
+              "Optional layout knobs, independent of the color preset. Each key is optional; omit any to keep its default.",
+            properties: {
+              spacing: { type: "string", enum: ["compact", "cozy", "roomy"] },
+              curve: { type: "string", enum: ["rounded", "straight", "stepped"] },
+              line: { type: "string", enum: ["thin", "regular", "bold"] },
+              arrow: { type: "string", enum: ["small", "regular", "large"] },
+            },
+            additionalProperties: false,
+          },
         },
         additionalProperties: false,
       },
     },
     async (args) => {
-      const body: { title?: string; code?: string; style?: string } = {};
+      const body: {
+        title?: string;
+        code?: string;
+        style?: string;
+        styleOptions?: Record<string, unknown>;
+      } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
       if (typeof args.style === "string") body.style = args.style;
+      if (args.styleOptions && typeof args.styleOptions === "object") {
+        body.styleOptions = args.styleOptions as Record<string, unknown>;
+      }
       const { diagram } = await client.create(body);
       return {
         content: [
@@ -90,7 +110,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
   server.registerTool(
     "update_diagram",
     {
-      description: "Update an existing diagram's title, mermaid source, and/or visual style preset.",
+      description:
+        "Update an existing diagram's title, mermaid source, visual style preset, and/or layout style options.",
       inputSchema: {
         type: "object",
         properties: {
@@ -103,6 +124,18 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             description:
               "Visual preset: midnight (default dark), paper, forest, ocean, mono.",
           },
+          styleOptions: {
+            type: "object",
+            description:
+              "Optional layout knobs, independent of the color preset. Each key is optional; omit any to keep its default.",
+            properties: {
+              spacing: { type: "string", enum: ["compact", "cozy", "roomy"] },
+              curve: { type: "string", enum: ["rounded", "straight", "stepped"] },
+              line: { type: "string", enum: ["thin", "regular", "bold"] },
+              arrow: { type: "string", enum: ["small", "regular", "large"] },
+            },
+            additionalProperties: false,
+          },
         },
         required: ["id"],
         additionalProperties: false,
@@ -111,16 +144,27 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     async (args) => {
       const id = String(args.id ?? "");
       if (!id) throw new Error("id is required");
-      const body: { title?: string; code?: string; style?: string } = {};
+      const body: {
+        title?: string;
+        code?: string;
+        style?: string;
+        styleOptions?: Record<string, unknown>;
+      } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
       if (typeof args.style === "string") body.style = args.style;
+      if (args.styleOptions && typeof args.styleOptions === "object") {
+        body.styleOptions = args.styleOptions as Record<string, unknown>;
+      }
       if (
         body.title === undefined &&
         body.code === undefined &&
-        body.style === undefined
+        body.style === undefined &&
+        body.styleOptions === undefined
       ) {
-        throw new Error("Provide at least one of title, code, or style.");
+        throw new Error(
+          "Provide at least one of title, code, style, or styleOptions.",
+        );
       }
       const { diagram } = await client.update(id, body);
       return {
