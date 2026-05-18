@@ -63,14 +63,21 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         properties: {
           title: { type: "string", description: "Display name" },
           code: { type: "string", description: "Mermaid source. Defaults to a tiny flowchart." },
+          style: {
+            type: "string",
+            enum: ["midnight", "paper", "forest", "ocean", "mono"],
+            description:
+              "Visual preset: midnight (default dark), paper, forest, ocean, mono. Omit to use the default.",
+          },
         },
         additionalProperties: false,
       },
     },
     async (args) => {
-      const body: { title?: string; code?: string } = {};
+      const body: { title?: string; code?: string; style?: string } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
+      if (typeof args.style === "string") body.style = args.style;
       const { diagram } = await client.create(body);
       return {
         content: [
@@ -90,6 +97,12 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           id: { type: "string" },
           title: { type: "string" },
           code: { type: "string" },
+          style: {
+            type: "string",
+            enum: ["midnight", "paper", "forest", "ocean", "mono"],
+            description:
+              "Visual preset: midnight (default dark), paper, forest, ocean, mono.",
+          },
         },
         required: ["id"],
         additionalProperties: false,
@@ -98,11 +111,16 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     async (args) => {
       const id = String(args.id ?? "");
       if (!id) throw new Error("id is required");
-      const body: { title?: string; code?: string } = {};
+      const body: { title?: string; code?: string; style?: string } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
-      if (body.title === undefined && body.code === undefined) {
-        throw new Error("Provide at least one of title or code.");
+      if (typeof args.style === "string") body.style = args.style;
+      if (
+        body.title === undefined &&
+        body.code === undefined &&
+        body.style === undefined
+      ) {
+        throw new Error("Provide at least one of title, code, or style.");
       }
       const { diagram } = await client.update(id, body);
       return {
