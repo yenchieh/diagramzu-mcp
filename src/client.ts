@@ -64,6 +64,10 @@ export class DiagramzuClient {
     });
   }
 
+  analyze(id: string): Promise<{ text: string }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}/analysis`);
+  }
+
   remove(id: string): Promise<void> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, { method: "DELETE" });
   }

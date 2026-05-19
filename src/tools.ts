@@ -176,4 +176,24 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       };
     },
   );
+
+  server.registerTool(
+    "analyze_diagram",
+    {
+      description:
+        "Analyze a stored flowchart diagram's structure (nodes, edges, subgraphs) and return actionable findings — orphan nodes, over-connected hubs, cycles, disconnected clusters, and grouping suggestions. Flowchart diagrams only.",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string", description: "Diagram UUID" } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const id = String(args.id ?? "");
+      if (!id) throw new Error("id is required");
+      const { text } = await client.analyze(id);
+      return { content: [{ type: "text", text }] };
+    },
+  );
 }
