@@ -82,6 +82,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             },
             additionalProperties: false,
           },
+          description: {
+            type: "string",
+            description:
+              "Optional short purpose blurb (≤500 chars) shown to share-link viewers.",
+          },
         },
         additionalProperties: false,
       },
@@ -92,6 +97,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         code?: string;
         style?: string;
         styleOptions?: Record<string, unknown>;
+        description?: string | null;
       } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
@@ -99,6 +105,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (args.styleOptions && typeof args.styleOptions === "object") {
         body.styleOptions = args.styleOptions as Record<string, unknown>;
       }
+      if (typeof args.description === "string") body.description = args.description;
       const { diagram } = await client.create(body);
       return {
         content: [
@@ -112,7 +119,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "update_diagram",
     {
       description:
-        "Update an existing diagram's title, mermaid source, visual style preset, and/or layout style options.",
+        "Update an existing diagram's title, description, mermaid source, visual style preset, and/or layout style options.",
       inputSchema: {
         type: "object",
         properties: {
@@ -138,6 +145,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             },
             additionalProperties: false,
           },
+          description: {
+            type: "string",
+            description:
+              "Optional short purpose blurb (≤500 chars) shown to share-link viewers.",
+          },
         },
         required: ["id"],
         additionalProperties: false,
@@ -151,6 +163,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         code?: string;
         style?: string;
         styleOptions?: Record<string, unknown>;
+        description?: string | null;
       } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
@@ -158,14 +171,16 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (args.styleOptions && typeof args.styleOptions === "object") {
         body.styleOptions = args.styleOptions as Record<string, unknown>;
       }
+      if (typeof args.description === "string") body.description = args.description;
       if (
         body.title === undefined &&
         body.code === undefined &&
         body.style === undefined &&
-        body.styleOptions === undefined
+        body.styleOptions === undefined &&
+        body.description === undefined
       ) {
         throw new Error(
-          "Provide at least one of title, code, style, or styleOptions.",
+          "Provide at least one of title, code, style, styleOptions, or description.",
         );
       }
       const { diagram } = await client.update(id, body);

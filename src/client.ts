@@ -15,6 +15,7 @@ export interface Diagram {
   id: string;
   spaceId: string;
   title: string;
+  description?: string | null;
   code: string;
   createdBy: string;
   createdAt: string;
@@ -50,14 +51,14 @@ export class DiagramzuClient {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`);
   }
 
-  create(body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown> }): Promise<{ diagram: Diagram }> {
+  create(body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null }): Promise<{ diagram: Diagram }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   }
 
-  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown> }): Promise<{ diagram: Diagram }> {
+  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null }): Promise<{ diagram: Diagram }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
