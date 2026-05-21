@@ -43,8 +43,21 @@ export class DiagramzuClient {
     return (await res.json()) as T;
   }
 
-  list(): Promise<{ diagrams: DiagramSummary[] }> {
-    return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams`);
+  list(params?: {
+    q?: string;
+    owner?: string;
+    sort?: "created" | "updated" | "title";
+  }): Promise<{ diagrams: DiagramSummary[] }> {
+    // PARITY: mirror apps/web/server/utils/mcp/tools.ts InProcessClient.list —
+    // force all=true so agents see space-wide results; folder scoping is
+    // human-only until a later task.
+    const search = new URLSearchParams({ all: "true" });
+    if (params?.q) search.set("q", params.q);
+    if (params?.owner) search.set("owner", params.owner);
+    if (params?.sort) search.set("sort", params.sort);
+    return this.req(
+      `/api/spaces/${this.cfg.spaceId}/diagrams?${search.toString()}`,
+    );
   }
 
   get(id: string): Promise<{ diagram: Diagram }> {

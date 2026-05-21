@@ -16,11 +16,43 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
   server.registerTool(
     "list_diagrams",
     {
-      description: "List every diagram in the configured Space. Returns id, title, and updatedAt for each.",
-      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      description:
+        "List diagrams in the configured Space (every folder, newest first by default). " +
+        "Use this BEFORE create_diagram to check whether a diagram with the target purpose already exists — " +
+        "if it does, prefer update_diagram over creating a duplicate. " +
+        "Filter with `q` (case-insensitive substring on title or code) when looking for a named diagram " +
+        "(e.g. q: 'schema' or q: 'infra'). Sort with `sort: 'updated'` to find the most recently changed diagrams.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          q: {
+            type: "string",
+            description:
+              "Case-insensitive substring search on title and code. Use when looking for a named diagram (e.g. 'schema', 'infra').",
+          },
+          owner: {
+            type: "string",
+            description:
+              "Filter to diagrams created by this user (Clerk user id, e.g. 'user_abc'). Rarely needed; omit unless the caller already has the user id.",
+          },
+          sort: {
+            type: "string",
+            enum: ["created", "updated", "title"],
+            description:
+              "Sort order. 'created' (default) = newest-first by creation; 'updated' = newest-first by last edit (use this to find the most recently changed diagram); 'title' = alphabetical.",
+          },
+        },
+        additionalProperties: false,
+      },
     },
-    async () => {
-      const { diagrams } = await client.list();
+    async (args) => {
+      const params: { q?: string; owner?: string; sort?: "created" | "updated" | "title" } = {};
+      if (typeof args.q === "string") params.q = args.q;
+      if (typeof args.owner === "string") params.owner = args.owner;
+      if (args.sort === "created" || args.sort === "updated" || args.sort === "title") {
+        params.sort = args.sort;
+      }
+      const { diagrams } = await client.list(params);
       const lines = diagrams.map((d) => `${d.id}  ${d.title}  (updated ${d.updatedAt})`);
       return {
         content: [
