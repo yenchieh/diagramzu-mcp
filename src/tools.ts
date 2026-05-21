@@ -250,4 +250,66 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       return { content: [{ type: "text", text }] };
     },
   );
+
+  server.registerTool(
+    "list_versions",
+    {
+      description:
+        "List manual snapshots of a diagram, newest first. Returns id, label, title, createdAt, and createdBy for each.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          diagramId: { type: "string", description: "Diagram UUID" },
+          limit: { type: "number", description: "Max items to return (default 100, max 200)" },
+          offset: { type: "number", description: "Items to skip (default 0)" },
+        },
+        required: ["diagramId"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const diagramId = String(args.diagramId ?? "");
+      if (!diagramId) throw new Error("diagramId is required");
+      const params: { limit?: number; offset?: number } = {};
+      if (typeof args.limit === "number") params.limit = args.limit;
+      if (typeof args.offset === "number") params.offset = args.offset;
+      const { items, total } = await client.listVersions(diagramId, params);
+      const lines = items.map(
+        (v) => `${v.id}  ${v.label ?? "(no label)"}  ${v.title}  (${v.createdAt})`,
+      );
+      const summary = `${items.length} of ${total} version${total === 1 ? "" : "s"}`;
+      return {
+        content: [{ type: "text", text: [summary, ...lines].join("\n") }],
+      };
+    },
+  );
+
+  server.registerTool(
+    "get_version",
+    {
+      description:
+        "Fetch one snapshot by id. Returns its title, mermaid source code, and metadata. Read-only — restore is human-only in the UI.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          diagramId: { type: "string", description: "Diagram UUID" },
+          versionId: { type: "string", description: "Version UUID" },
+        },
+        required: ["diagramId", "versionId"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const diagramId = String(args.diagramId ?? "");
+      const versionId = String(args.versionId ?? "");
+      if (!diagramId || !versionId) throw new Error("diagramId and versionId are required");
+      const { version } = await client.getVersion(diagramId, versionId);
+      const header = `# ${version.title}` +
+        (version.label ? ` (${version.label})` : "") +
+        `\n_Created ${version.createdAt} by ${version.createdBy}_`;
+      return {
+        content: [{ type: "text", text: `${header}\n\n${version.code}` }],
+      };
+    },
+  );
 }

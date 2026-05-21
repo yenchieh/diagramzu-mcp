@@ -73,6 +73,43 @@ export class DiagramzuClient {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, { method: "DELETE" });
   }
 
+  listVersions(diagramId: string, params: { limit?: number; offset?: number }): Promise<{
+    items: Array<{
+      id: string;
+      label: string | null;
+      title: string;
+      createdAt: string;
+      createdBy: string;
+    }>;
+    total: number;
+  }> {
+    const search = new URLSearchParams();
+    if (params.limit !== undefined) search.set("limit", String(params.limit));
+    if (params.offset !== undefined) search.set("offset", String(params.offset));
+    const q = search.toString();
+    return this.req(
+      `/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/versions${q ? `?${q}` : ""}`,
+    );
+  }
+
+  getVersion(diagramId: string, versionId: string): Promise<{
+    version: {
+      id: string;
+      label: string | null;
+      title: string;
+      code: string;
+      style: string | null;
+      styleOptions: string | null;
+      description: string | null;
+      createdAt: string;
+      createdBy: string;
+    };
+  }> {
+    return this.req(
+      `/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/versions/${versionId}`,
+    );
+  }
+
   diagramUrl(id: string): string {
     return `${this.cfg.baseUrl}/app/d/${id}`;
   }
