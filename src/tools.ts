@@ -72,7 +72,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           styleOptions: {
             type: "object",
             description:
-              "Optional layout knobs, independent of the color preset. Each key is optional; omit any to keep its default.",
+              "Optional layout knobs, independent of the color preset. Each key is optional; omit any to keep its default. Pass layout: 'auto' to let the server pick a concrete layout based on the diagram's shape.",
             properties: {
               spacing: { type: "string", enum: ["compact", "cozy", "roomy"] },
               curve: { type: "string", enum: ["rounded", "straight", "stepped"] },
@@ -88,6 +88,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
                   "elk.force",
                   "elk.stress",
                   "elk.sporeOverlap",
+                  "auto",
                 ],
               },
             },
@@ -146,7 +147,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           styleOptions: {
             type: "object",
             description:
-              "Optional layout knobs, independent of the color preset. Each key is optional; omit any to keep its default.",
+              "Optional layout knobs, independent of the color preset. Each key is optional; omit any to keep its default. Pass layout: 'auto' to let the server pick a concrete layout based on the diagram's shape.",
             properties: {
               spacing: { type: "string", enum: ["compact", "cozy", "roomy"] },
               curve: { type: "string", enum: ["rounded", "straight", "stepped"] },
@@ -162,6 +163,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
                   "elk.force",
                   "elk.stress",
                   "elk.sporeOverlap",
+                  "auto",
                 ],
               },
             },
