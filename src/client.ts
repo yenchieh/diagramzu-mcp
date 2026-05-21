@@ -23,6 +23,15 @@ export interface Diagram {
   updatedAt: string;
 }
 
+export interface FolderRow {
+  id: string;
+  spaceId: string;
+  parentId: string | null;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class DiagramzuClient {
   constructor(private readonly cfg: DiagramzuConfig) {}
 
@@ -47,14 +56,16 @@ export class DiagramzuClient {
     q?: string;
     owner?: string;
     sort?: "created" | "updated" | "title";
+    folderId?: string;
   }): Promise<{ diagrams: DiagramSummary[] }> {
     // PARITY: mirror apps/web/server/utils/mcp/tools.ts InProcessClient.list —
-    // force all=true so agents see space-wide results; folder scoping is
-    // human-only until a later task.
+    // force all=true so agents see every folder by default. Pass folderId
+    // to narrow to one folder.
     const search = new URLSearchParams({ all: "true" });
     if (params?.q) search.set("q", params.q);
     if (params?.owner) search.set("owner", params.owner);
     if (params?.sort) search.set("sort", params.sort);
+    if (params?.folderId) search.set("folderId", params.folderId);
     return this.req(
       `/api/spaces/${this.cfg.spaceId}/diagrams?${search.toString()}`,
     );
@@ -64,14 +75,14 @@ export class DiagramzuClient {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`);
   }
 
-  create(body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null }): Promise<{ diagram: Diagram }> {
+  create(body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; folderId?: string }): Promise<{ diagram: Diagram }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   }
 
-  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; createVersion?: boolean; versionLabel?: string }): Promise<{ diagram: Diagram; versionId?: string }> {
+  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; createVersion?: boolean; versionLabel?: string; folderId?: string }): Promise<{ diagram: Diagram; versionId?: string }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
@@ -121,6 +132,10 @@ export class DiagramzuClient {
     return this.req(
       `/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/versions/${versionId}`,
     );
+  }
+
+  listFolders(): Promise<{ folders: FolderRow[] }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/folders`);
   }
 
   diagramUrl(id: string): string {

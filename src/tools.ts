@@ -41,17 +41,23 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             description:
               "Sort order. 'created' (default) = newest-first by creation; 'updated' = newest-first by last edit (use this to find the most recently changed diagram); 'title' = alphabetical.",
           },
+          folderId: {
+            type: "string",
+            description:
+              "Optional UUID — narrow to diagrams in this folder. Use list_folders to look up folder ids. Omit to see every folder (the default).",
+          },
         },
         additionalProperties: false,
       },
     },
     async (args) => {
-      const params: { q?: string; owner?: string; sort?: "created" | "updated" | "title" } = {};
+      const params: { q?: string; owner?: string; sort?: "created" | "updated" | "title"; folderId?: string } = {};
       if (typeof args.q === "string") params.q = args.q;
       if (typeof args.owner === "string") params.owner = args.owner;
       if (args.sort === "created" || args.sort === "updated" || args.sort === "title") {
         params.sort = args.sort;
       }
+      if (typeof args.folderId === "string") params.folderId = args.folderId;
       const { diagrams } = await client.list(params);
       const lines = diagrams.map((d) => `${d.id}  ${d.title}  (updated ${d.updatedAt})`);
       return {
@@ -59,6 +65,31 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           { type: "text", text: lines.length ? lines.join("\n") : "(no diagrams yet)" },
         ],
       };
+    },
+  );
+
+  server.registerTool(
+    "list_folders",
+    {
+      description:
+        "List every folder in the configured Space, ordered by name. Returns id and full path (e.g. 'Infra/AWS' for a nested folder). " +
+        "Use this BEFORE create_diagram or update_diagram when you want to place a diagram in a meaningful folder — " +
+        "agents should match by name (e.g. find a folder named 'Schemas' and pass its id as folderId). " +
+        "Folders are at most two levels deep. Creating folders is currently human-only.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    async () => {
+      const { folders } = await client.listFolders();
+      if (folders.length === 0) {
+        return { content: [{ type: "text", text: "(no folders yet)" }] };
+      }
+      const byId = new Map(folders.map((f) => [f.id, f]));
+      const lines = folders.map((f) => {
+        if (f.parentId === null) return `${f.id}  ${f.name}`;
+        const parent = byId.get(f.parentId);
+        return parent ? `${f.id}  ${parent.name}/${f.name}` : `${f.id}  ${f.name}`;
+      });
+      return { content: [{ type: "text", text: lines.join("\n") }] };
     },
   );
 
@@ -131,6 +162,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             description:
               "Optional short purpose blurb (≤500 chars) shown to share-link viewers.",
           },
+          folderId: {
+            type: "string",
+            description:
+              "Optional UUID of an existing folder to place the diagram in. Use list_folders first to find the right folder by name (e.g. 'Infra', 'Schemas'). Omit to place at the space root.",
+          },
         },
         additionalProperties: false,
       },
@@ -142,6 +178,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         style?: string;
         styleOptions?: Record<string, unknown>;
         description?: string | null;
+        folderId?: string;
       } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
@@ -150,6 +187,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         body.styleOptions = args.styleOptions as Record<string, unknown>;
       }
       if (typeof args.description === "string") body.description = args.description;
+      if (typeof args.folderId === "string") body.folderId = args.folderId;
       const { diagram } = await client.create(body);
       return {
         content: [
@@ -216,6 +254,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             description:
               "Optional short label for the snapshot taken when createVersion is true (max 80 chars).",
           },
+          folderId: {
+            type: "string",
+            description:
+              "Optional UUID of an existing folder to move this diagram into. Use list_folders to look up folder ids. (Moving back to root is currently human-only.)",
+          },
         },
         required: ["id"],
         additionalProperties: false,
@@ -232,6 +275,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         description?: string | null;
         createVersion?: boolean;
         versionLabel?: string;
+        folderId?: string;
       } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
@@ -242,15 +286,17 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (typeof args.description === "string") body.description = args.description;
       if (typeof args.createVersion === "boolean") body.createVersion = args.createVersion;
       if (typeof args.versionLabel === "string") body.versionLabel = args.versionLabel;
+      if (typeof args.folderId === "string") body.folderId = args.folderId;
       if (
         body.title === undefined &&
         body.code === undefined &&
         body.style === undefined &&
         body.styleOptions === undefined &&
-        body.description === undefined
+        body.description === undefined &&
+        body.folderId === undefined
       ) {
         throw new Error(
-          "Provide at least one of title, code, style, styleOptions, or description.",
+          "Provide at least one of title, code, style, styleOptions, description, or folderId.",
         );
       }
       const { diagram, versionId } = await client.update(id, body);
