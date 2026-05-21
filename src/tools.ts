@@ -174,6 +174,16 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
             description:
               "Optional short purpose blurb (≤500 chars) shown to share-link viewers.",
           },
+          createVersion: {
+            type: "boolean",
+            description:
+              "If true, snapshot the pre-update diagram state as a version row before applying the update. Use this to create a checkpoint right before an agent overwrites the diagram.",
+          },
+          versionLabel: {
+            type: "string",
+            description:
+              "Optional short label for the snapshot taken when createVersion is true (max 80 chars).",
+          },
         },
         required: ["id"],
         additionalProperties: false,
@@ -188,6 +198,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         style?: string;
         styleOptions?: Record<string, unknown>;
         description?: string | null;
+        createVersion?: boolean;
+        versionLabel?: string;
       } = {};
       if (typeof args.title === "string") body.title = args.title;
       if (typeof args.code === "string") body.code = args.code;
@@ -196,6 +208,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         body.styleOptions = args.styleOptions as Record<string, unknown>;
       }
       if (typeof args.description === "string") body.description = args.description;
+      if (typeof args.createVersion === "boolean") body.createVersion = args.createVersion;
+      if (typeof args.versionLabel === "string") body.versionLabel = args.versionLabel;
       if (
         body.title === undefined &&
         body.code === undefined &&
@@ -207,11 +221,12 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           "Provide at least one of title, code, style, styleOptions, or description.",
         );
       }
-      const { diagram } = await client.update(id, body);
+      const { diagram, versionId } = await client.update(id, body);
+      const lines = [`Updated: ${diagram.id}`];
+      if (versionId) lines.push(`Snapshot: ${versionId}`);
+      lines.push(client.diagramUrl(diagram.id));
       return {
-        content: [
-          { type: "text", text: `Updated: ${diagram.id}\n${client.diagramUrl(diagram.id)}` },
-        ],
+        content: [{ type: "text", text: lines.join("\n") }],
       };
     },
   );

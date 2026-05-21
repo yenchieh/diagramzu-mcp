@@ -58,7 +58,7 @@ export class DiagramzuClient {
     });
   }
 
-  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null }): Promise<{ diagram: Diagram }> {
+  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; createVersion?: boolean; versionLabel?: string }): Promise<{ diagram: Diagram; versionId?: string }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
