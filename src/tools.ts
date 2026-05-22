@@ -96,7 +96,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
   server.registerTool(
     "get_diagram",
     {
-      description: "Fetch one diagram by id. Returns its title, mermaid source code, and a shareable URL.",
+      description:
+        "Fetch one diagram by id. Returns its title, description (the agent's brief), mermaid source code, and a shareable URL. " +
+        "Read the description before editing — it tells you what the diagram is for and when to update it.",
       inputSchema: {
         type: "object",
         properties: { id: { type: "string", description: "Diagram UUID" } },
@@ -109,10 +111,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (!id) throw new Error("id is required");
       const { diagram } = await client.get(id);
       const url = client.diagramUrl(diagram.id);
+      const sections = [`# ${diagram.title}`];
+      if (diagram.description) sections.push(`> ${diagram.description}`);
+      sections.push(diagram.code, `---\nOpen: ${url}`);
       return {
-        content: [
-          { type: "text", text: `# ${diagram.title}\n\n${diagram.code}\n\n---\nOpen: ${url}` },
-        ],
+        content: [{ type: "text", text: sections.join("\n\n") }],
       };
     },
   );
