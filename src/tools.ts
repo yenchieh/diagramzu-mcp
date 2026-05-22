@@ -160,7 +160,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           description: {
             type: "string",
             description:
-              "Optional short purpose blurb (≤500 chars) shown to share-link viewers.",
+              "Overall purpose of the diagram (≤1000 chars). Shown to share-link viewers and surfaced back to the agent as the diagram's brief — write this before generating the code.",
           },
           folderId: {
             type: "string",
@@ -242,7 +242,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           description: {
             type: "string",
             description:
-              "Optional short purpose blurb (≤500 chars) shown to share-link viewers.",
+              "Overall purpose of the diagram (≤1000 chars). Shown to share-link viewers and surfaced back to the agent as the diagram's brief — write this before generating the code.",
           },
           createVersion: {
             type: "boolean",
