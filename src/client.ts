@@ -59,13 +59,14 @@ export class DiagramzuClient {
     folderId?: string;
   }): Promise<{ diagrams: DiagramSummary[] }> {
     // PARITY: mirror apps/web/server/utils/mcp/tools.ts InProcessClient.list —
-    // force all=true so agents see every folder by default. Pass folderId
-    // to narrow to one folder.
-    const search = new URLSearchParams({ all: "true" });
+    // folderId narrows to one folder; otherwise force all=true so agents see
+    // every folder. (Server ignores folderId when all=true.)
+    const search = new URLSearchParams();
+    if (params?.folderId) search.set("folderId", params.folderId);
+    else search.set("all", "true");
     if (params?.q) search.set("q", params.q);
     if (params?.owner) search.set("owner", params.owner);
     if (params?.sort) search.set("sort", params.sort);
-    if (params?.folderId) search.set("folderId", params.folderId);
     return this.req(
       `/api/spaces/${this.cfg.spaceId}/diagrams?${search.toString()}`,
     );
