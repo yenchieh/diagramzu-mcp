@@ -15,7 +15,7 @@ The hosted server is the easy path: no install, no build. Just paste a config.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http diagramzu https://mcp.diagramzu.ai/mcp \
+claude mcp add --scope user --transport http diagramzu https://mcp.diagramzu.ai/mcp \
   --header "Authorization: Bearer dz_live_xxx"
 ```
 
