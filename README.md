@@ -15,7 +15,7 @@ The hosted server is the easy path: no install, no build. Just paste a config.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http diagramzu https://diagramzu.ai/mcp \
+claude mcp add --transport http diagramzu https://mcp.diagramzu.ai/mcp \
   --header "Authorization: Bearer dz_live_xxx"
 ```
 
@@ -28,7 +28,7 @@ Add to your client's MCP config (`~/Library/Application Support/Claude/claude_de
   "mcpServers": {
     "diagramzu": {
       "type": "http",
-      "url": "https://diagramzu.ai/mcp",
+      "url": "https://mcp.diagramzu.ai/mcp",
       "headers": { "Authorization": "Bearer dz_live_xxx" }
     }
   }
@@ -37,7 +37,7 @@ Add to your client's MCP config (`~/Library/Application Support/Claude/claude_de
 
 ### ChatGPT custom GPT (Actions)
 
-In the GPT builder, add an MCP server action pointing to `https://diagramzu.ai/mcp` with a Bearer-token authentication header set to your `dz_live_…` token.
+In the GPT builder, add an MCP server action pointing to `https://mcp.diagramzu.ai/mcp` with a Bearer-token authentication header set to your `dz_live_…` token.
 
 ### Local stdio (for clients that don't speak remote MCP)
 
