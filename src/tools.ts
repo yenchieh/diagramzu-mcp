@@ -123,7 +123,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
   server.registerTool(
     "create_diagram",
     {
-      description: "Create a new diagram in the Space. Returns its id and shareable URL.",
+      description:
+        "Create a new diagram in the Space. Returns its id and shareable URL. " +
+        "Use mermaid classDef + class to color-group related nodes by meaning (3–5 roles) — see this server's instructions for the pattern.",
       inputSchema: {
         type: "object",
         properties: {
@@ -204,7 +206,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "update_diagram",
     {
       description:
-        "Update an existing diagram's title, description, mermaid source, visual style preset, and/or layout style options.",
+        "Update an existing diagram's title, description, mermaid source, visual style preset, and/or layout style options. " +
+        "When rewriting the source, keep or restore classDef + class groupings so the diagram stays color-grouped.",
       inputSchema: {
         type: "object",
         properties: {
