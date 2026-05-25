@@ -1,6 +1,6 @@
 {
   "name": "@diagramzu/mcp",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "MCP server for diagramzu.ai — read/write diagrams in your Space from Claude, Cursor, ChatGPT, or any MCP client.",
   "license": "MIT",
   "author": "diagramzu",
@@ -27,7 +27,11 @@
   "bin": {
     "diagramzu-mcp": "./dist/index.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public"
   },
