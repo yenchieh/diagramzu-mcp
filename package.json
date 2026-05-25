@@ -1,16 +1,41 @@
 {
   "name": "@diagramzu/mcp",
   "version": "0.0.1",
-  "private": true,
   "description": "MCP server for diagramzu.ai — read/write diagrams in your Space from Claude, Cursor, ChatGPT, or any MCP client.",
+  "license": "MIT",
+  "author": "diagramzu",
+  "homepage": "https://diagramzu.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yenchieh/diagramzu.git",
+    "directory": "packages/mcp-diagramzu"
+  },
+  "bugs": {
+    "url": "https://github.com/yenchieh/diagramzu/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "diagramzu",
+    "mermaid",
+    "diagrams",
+    "claude",
+    "cursor",
+    "chatgpt",
+    "anthropic"
+  ],
   "type": "module",
   "bin": {
     "diagramzu-mcp": "./dist/index.js"
   },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4"
