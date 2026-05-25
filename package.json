@@ -7,11 +7,10 @@
   "homepage": "https://diagramzu.ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yenchieh/diagramzu.git",
-    "directory": "packages/mcp-diagramzu"
+    "url": "git+https://github.com/yenchieh/diagramzu-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/yenchieh/diagramzu/issues"
+    "url": "https://github.com/yenchieh/diagramzu-mcp/issues"
   },
   "keywords": [
     "mcp",
