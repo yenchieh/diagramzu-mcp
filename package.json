@@ -1,6 +1,6 @@
 {
   "name": "@diagramzu/mcp",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "MCP server for diagramzu.ai — read/write diagrams in your Space from Claude, Cursor, ChatGPT, or any MCP client.",
   "license": "MIT",
   "author": "diagramzu",
