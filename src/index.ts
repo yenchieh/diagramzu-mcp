@@ -43,7 +43,9 @@ Five named roles are available; use the 3–5 that fit your diagram:
     class C,D,E core
     class F data
 
-Do not write \`classDef\` for these five names — Diagramzu injects them at render time, so the colors stay consistent with the user's chosen style. Custom one-off colors can use any other class name (e.g. \`classDef errorState fill:#dc2626\`).
+Both \`class A,B edge\` (batch) and \`A[Browser]:::edge\` (inline) syntax work — use either.
+
+Do not write \`classDef\` for these five names — Diagramzu injects the colors at render time. Custom colors not in the palette can use any other class name (e.g. \`classDef errorState fill:#dc2626\`).
 
 Layout is automatic — pass styleOptions.layout: "auto" (or omit) and the server picks the engine. Don't hand-tune layout unless the user asks.`;
 
