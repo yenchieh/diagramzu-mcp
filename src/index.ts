@@ -26,18 +26,24 @@ const SERVER_INSTRUCTIONS = `Diagramzu stores diagrams that humans read and shar
 2. Before placing in a folder: call list_folders.
 3. After creating/updating, share the returned URL with the user.
 
-Make diagrams visually scannable. A flat single-color diagram is hard to read; one where every node is a different color is noise. Group related nodes and assign 3–5 color classes by MEANING (layer, status, ownership, type — not decoration), using mermaid's classDef + class syntax:
+Make diagrams visually scannable. A flat single-color diagram is hard to read; one where every node is a different color is noise. Group related nodes with \`class\` assignments — Diagramzu supplies the palette so colors coordinate with the diagram's visual style.
+
+Five named roles are available; use the 3–5 that fit your diagram:
+- \`edge\` — entry / boundary nodes (browser, CDN, user-facing)
+- \`core\` — primary business logic (services, gateways)
+- \`data\` — persistence (DBs, caches, queues)
+- \`accent\` — the highlighted thing the diagram is *about*
+- \`muted\` — external / legacy / de-emphasized
 
   flowchart TD
     A[Browser] --> B[CDN] --> C[Gateway]
     C --> D[Auth] & E[Billing]
     D & E --> F[(Database)]
-    classDef edge fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
-    classDef core fill:#fef3c7,stroke:#d97706,color:#78350f
-    classDef data fill:#dcfce7,stroke:#16a34a,color:#14532d
     class A,B edge
     class C,D,E core
     class F data
+
+Do not write \`classDef\` for these five names — Diagramzu injects them at render time, so the colors stay consistent with the user's chosen style. Custom one-off colors can use any other class name (e.g. \`classDef errorState fill:#dc2626\`).
 
 Layout is automatic — pass styleOptions.layout: "auto" (or omit) and the server picks the engine. Don't hand-tune layout unless the user asks.`;
 
