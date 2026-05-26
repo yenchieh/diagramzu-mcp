@@ -68,6 +68,16 @@ Most users should prefer the remote HTTP transport above — the stdio path exis
 | `list_versions` | List version history for a diagram |
 | `get_version` | Fetch a specific historical version of a diagram |
 
+## Show off your setup
+
+If you publish your MCP / Claude Code config in a dotfiles or example repo, drop this in the README so the next person knows where the diagrams come from:
+
+```markdown
+[![MCP: diagramzu](https://diagramzu.ai/badge/mcp.svg)](https://diagramzu.ai)
+```
+
+Renders as a small shields-style badge — gray `MCP` + indigo `diagramzu`.
+
 ## Local development (this repo)
 
 For hacking on diagramzu itself, build from source:
