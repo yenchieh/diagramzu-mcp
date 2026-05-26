@@ -125,7 +125,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     {
       description:
         "Create a new diagram in the Space. Returns its id and shareable URL. " +
-        "Use `class` (not `classDef`) with role names `edge`/`core`/`data`/`accent`/`muted` to color-group related nodes — see this server's instructions.",
+        "Use `class` (not `classDef`) with role names `edge`/`core`/`data`/`accent`/`muted` to color-group related nodes (3–5 roles) — see this server's instructions.",
       inputSchema: {
         type: "object",
         properties: {
