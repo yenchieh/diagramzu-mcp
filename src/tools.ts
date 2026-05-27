@@ -193,11 +193,13 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       }
       if (typeof args.description === "string") body.description = args.description;
       if (typeof args.folderId === "string") body.folderId = args.folderId;
-      const { diagram } = await client.create(body);
+      const { diagram, warnings } = await client.create(body);
+      const lines = [`Created: ${diagram.id}`, client.diagramUrl(diagram.id)];
+      if (warnings && warnings.length) {
+        lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
+      }
       return {
-        content: [
-          { type: "text", text: `Created: ${diagram.id}\n${client.diagramUrl(diagram.id)}` },
-        ],
+        content: [{ type: "text", text: lines.join("\n") }],
       };
     },
   );
@@ -305,10 +307,13 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           "Provide at least one of title, code, style, styleOptions, description, or folderId.",
         );
       }
-      const { diagram, versionId } = await client.update(id, body);
+      const { diagram, versionId, warnings } = await client.update(id, body);
       const lines = [`Updated: ${diagram.id}`];
       if (versionId) lines.push(`Snapshot: ${versionId}`);
       lines.push(client.diagramUrl(diagram.id));
+      if (warnings && warnings.length) {
+        lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
+      }
       return {
         content: [{ type: "text", text: lines.join("\n") }],
       };

@@ -76,14 +76,14 @@ export class DiagramzuClient {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`);
   }
 
-  create(body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; folderId?: string }): Promise<{ diagram: Diagram }> {
+  create(body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; folderId?: string }): Promise<{ diagram: Diagram; warnings?: string[] }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   }
 
-  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; createVersion?: boolean; versionLabel?: string; folderId?: string }): Promise<{ diagram: Diagram; versionId?: string }> {
+  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; createVersion?: boolean; versionLabel?: string; folderId?: string }): Promise<{ diagram: Diagram; versionId?: string; warnings?: string[] }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
