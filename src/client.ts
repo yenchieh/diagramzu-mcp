@@ -94,6 +94,19 @@ export class DiagramzuClient {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}/analysis`);
   }
 
+  // Look-up only. Returns the public share URL when an active link exists,
+  // null otherwise. Mirrors apps/web/server/utils/mcp/tools.ts. Fail-open.
+  async getActiveShareUrl(diagramId: string): Promise<string | null> {
+    try {
+      const { link } = await this.req<{ link: { slug: string } | null }>(
+        `/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/shares`,
+      );
+      return link ? `${this.cfg.baseUrl}/s/${link.slug}` : null;
+    } catch {
+      return null;
+    }
+  }
+
   remove(id: string): Promise<void> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, { method: "DELETE" });
   }

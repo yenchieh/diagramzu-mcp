@@ -111,9 +111,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (!id) throw new Error("id is required");
       const { diagram } = await client.get(id);
       const url = client.diagramUrl(diagram.id);
+      const shareUrl = await client.getActiveShareUrl(diagram.id);
       const sections = [`# ${diagram.title}`];
       if (diagram.description) sections.push(`> ${diagram.description}`);
-      sections.push(diagram.code, `---\nOpen: ${url}`);
+      const footer = shareUrl ? `---\nOpen: ${url}\nShare: ${shareUrl}` : `---\nOpen: ${url}`;
+      sections.push(diagram.code, footer);
       return {
         content: [{ type: "text", text: sections.join("\n\n") }],
       };
@@ -195,6 +197,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (typeof args.folderId === "string") body.folderId = args.folderId;
       const { diagram, warnings } = await client.create(body);
       const lines = [`Created: ${diagram.id}`, client.diagramUrl(diagram.id)];
+      const shareUrl = await client.getActiveShareUrl(diagram.id);
+      if (shareUrl) lines.push(`Share: ${shareUrl}`);
       if (warnings && warnings.length) {
         lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
       }
@@ -311,6 +315,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const lines = [`Updated: ${diagram.id}`];
       if (versionId) lines.push(`Snapshot: ${versionId}`);
       lines.push(client.diagramUrl(diagram.id));
+      const shareUrl = await client.getActiveShareUrl(diagram.id);
+      if (shareUrl) lines.push(`Share: ${shareUrl}`);
       if (warnings && warnings.length) {
         lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
       }
