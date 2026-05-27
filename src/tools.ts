@@ -196,9 +196,10 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (typeof args.description === "string") body.description = args.description;
       if (typeof args.folderId === "string") body.folderId = args.folderId;
       const { diagram, warnings } = await client.create(body);
+      // A brand-new diagram id can't have an active share link yet (POST
+      // never mints one), so skip the lookup. update_diagram / get_diagram
+      // still call it because the diagram may have been shared since.
       const lines = [`Created: ${diagram.id}`, client.diagramUrl(diagram.id)];
-      const shareUrl = await client.getActiveShareUrl(diagram.id);
-      if (shareUrl) lines.push(`Share: ${shareUrl}`);
       if (warnings && warnings.length) {
         lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
       }
