@@ -12,11 +12,11 @@ Labels render as plain text. Use <br/> for line breaks. Do NOT use <b>, <strong>
 
 Make diagrams visually scannable. A flat single-color diagram is hard to read; one where every node is a different color is noise. Group related nodes with \`class\` assignments — Diagramzu supplies the palette so colors coordinate with the diagram's visual style.
 
-Five named roles are available; use the 3–5 that fit your diagram:
-- \`edge\` — entry / boundary nodes (browser, CDN, user-facing)
-- \`core\` — primary business logic (services, gateways)
-- \`data\` — persistence (DBs, caches, queues)
-- \`accent\` — the highlighted thing the diagram is *about*
+Coloring is about contrast, not categorization. One accent that holds <20% of nodes; the rest defaults to \`edge\`. Reach for a third role (\`core\` or \`data\`) only when there's a distinct meaning to convey beyond the accent. Roles available:
+- \`edge\` — default / structural nodes (use this for most of the graph)
+- \`accent\` — the one thing the diagram is *about* (keep this <20% of nodes)
+- \`core\` — primary business logic, when distinct from edge
+- \`data\` — persistence (DBs, caches, queues), when distinct from edge
 - \`muted\` — external / legacy / de-emphasized
 
   flowchart TD
