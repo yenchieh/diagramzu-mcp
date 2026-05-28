@@ -127,8 +127,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     {
       description:
         "Create a new diagram in the Space. Returns its id and shareable URL. " +
-        "Pick the diagram type that fits the data: process steps → flowchart, time-ordered handoffs → sequenceDiagram, schema → erDiagram, taxonomy → mindmap. " +
-        "Use `class` (not `classDef`) with role names `edge`/`core`/`data`/`accent`/`muted` to color-group related nodes — see this server's instructions.",
+        "See this server's instructions for diagram-type selection and `class` role names (`edge`/`core`/`data`/`accent`/`muted`) for color-grouping.",
       inputSchema: {
         type: "object",
         properties: {

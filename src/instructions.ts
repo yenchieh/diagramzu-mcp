@@ -8,6 +8,13 @@ export const SERVER_INSTRUCTIONS = `Diagramzu stores diagrams that humans read a
 4. When substantially rewriting an existing diagram's code, pass createVersion: true (optionally with versionLabel) so the prior state is snapshotted first.
 5. Match the user's language — title, description, and node labels should use the language they wrote in.
 
+Pick the diagram type that fits the data:
+- process steps / decisions → flowchart
+- time-ordered handoffs between actors → sequenceDiagram
+- entity schema with fields/relationships → erDiagram
+- hierarchical taxonomy → mindmap
+Default to flowchart only when none of the others fit better.
+
 Labels render as plain text. Use <br/> for line breaks. Do NOT use <b>, <strong>, <i>, markdown **bold**, or HTML attributes — they render as literal characters. Keep each label ≤4 short lines; longer labels overflow on dense layouts. Mermaid %%{init: ...}%% directives are not supported — use styleOptions instead.
 
 Make diagrams visually scannable. A flat single-color diagram is hard to read; one where every node is a different color is noise. Group related nodes with \`class\` assignments — Diagramzu supplies the palette so colors coordinate with the diagram's visual style.
