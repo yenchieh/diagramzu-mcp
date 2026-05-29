@@ -484,4 +484,127 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       return { content: [{ type: "text", text: `Added: ${comment.id}\n${client.diagramUrl(diagramId)}` }] };
     },
   );
+
+  server.registerTool(
+    "list_decks",
+    {
+      description:
+        "List presentation decks in the configured Space, newest-edited first. A deck is an ordered set of existing diagrams shown as a slideshow. Returns each deck's id, title, and slide count.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    async () => {
+      const { decks } = await client.listDecks();
+      if (decks.length === 0) {
+        return { content: [{ type: "text", text: "(no decks yet)" }] };
+      }
+      const lines = decks.map(
+        (d) => `${d.id}  ${d.title}  (${d.slideCount} slide${d.slideCount === 1 ? "" : "s"})`,
+      );
+      return { content: [{ type: "text", text: lines.join("\n") }] };
+    },
+  );
+
+  server.registerTool(
+    "get_deck",
+    {
+      description:
+        "Fetch one deck by id. Returns its title, description, and the ordered list of slides (each slide is a diagram id + title in presentation order).",
+      inputSchema: {
+        type: "object",
+        properties: { id: { type: "string", description: "Deck UUID" } },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const id = String(args.id ?? "");
+      if (!id) throw new Error("id is required");
+      const { deck, slides } = await client.getDeck(id);
+      const sections = [`# ${deck.title}`];
+      if (deck.description) sections.push(`> ${deck.description}`);
+      const slideLines = slides.length
+        ? slides.map((s, i) => `${i + 1}. ${s.diagramId}  ${s.title}`).join("\n")
+        : "(no slides yet)";
+      sections.push(slideLines, `---\nPresent: ${client.deckUrl(deck.id)}`);
+      return { content: [{ type: "text", text: sections.join("\n\n") }] };
+    },
+  );
+
+  server.registerTool(
+    "create_deck",
+    {
+      description:
+        "Create a presentation deck from existing diagrams. Pass `slides` as the complete ordered list of diagram ids — the deck plays them as a slideshow in that order. Typical flow: create_diagram for each slide, collect the returned ids, then create_deck with those ids in presentation order. Returns the deck id and the present URL to share. Diagram ids must already exist in this Space (use list_diagrams to find them).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Deck title shown in the deck list and above the presentation." },
+          description: {
+            type: "string",
+            description: "Optional one-line summary of what the deck covers (≤1000 chars).",
+          },
+          slides: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Ordered list of existing diagram UUIDs. The deck plays them in this exact order. A diagram may appear at most once. Omit or pass [] to create an empty deck.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const body: { title?: string; description?: string | null; slides?: string[] } = {};
+      if (typeof args.title === "string") body.title = args.title;
+      if (typeof args.description === "string") body.description = args.description;
+      if (Array.isArray(args.slides)) {
+        body.slides = args.slides.filter((s): s is string => typeof s === "string");
+      }
+      const { deck } = await client.createDeck(body);
+      return {
+        content: [{ type: "text", text: [`Created deck: ${deck.id}`, client.deckUrl(deck.id)].join("\n") }],
+      };
+    },
+  );
+
+  server.registerTool(
+    "update_deck",
+    {
+      description:
+        "Update a deck's title, description, and/or slide order. `slides` is DECLARATIVE: pass the complete desired ordered list of diagram ids — reorder, add, and remove are all expressed by sending the new full list (any id omitted is removed from the deck; new ids are appended in the order given). Returns the deck id and present URL.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Deck UUID" },
+          title: { type: "string" },
+          description: { type: "string" },
+          slides: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Complete ordered list of diagram UUIDs that should be in the deck after this update. Omit to leave the slides unchanged; pass [] to clear all slides.",
+          },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const id = String(args.id ?? "");
+      if (!id) throw new Error("id is required");
+      const body: { title?: string; description?: string | null; slides?: string[] } = {};
+      if (typeof args.title === "string") body.title = args.title;
+      if (typeof args.description === "string") body.description = args.description;
+      if (Array.isArray(args.slides)) {
+        body.slides = args.slides.filter((s): s is string => typeof s === "string");
+      }
+      if (body.title === undefined && body.description === undefined && body.slides === undefined) {
+        throw new Error("Provide at least one of title, description, or slides.");
+      }
+      const { deck } = await client.updateDeck(id, body);
+      return {
+        content: [{ type: "text", text: [`Updated deck: ${deck.id}`, client.deckUrl(deck.id)].join("\n") }],
+      };
+    },
+  );
 }
