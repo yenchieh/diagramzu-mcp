@@ -32,6 +32,35 @@ export interface FolderRow {
   updatedAt: string;
 }
 
+export interface DeckSummary {
+  id: string;
+  title: string;
+  slideCount: number;
+}
+
+export interface DeckSlideRef {
+  diagramId: string;
+  title: string;
+  position: number;
+}
+
+export interface DeckDetail {
+  deck: { id: string; title: string; description: string | null };
+  slides: DeckSlideRef[];
+}
+
+export interface CreateDeckInput {
+  title?: string;
+  description?: string | null;
+  slides?: string[];
+}
+
+export interface UpdateDeckInput {
+  title?: string;
+  description?: string | null;
+  slides?: string[];
+}
+
 export class DiagramzuClient {
   constructor(private readonly cfg: DiagramzuConfig) {}
 
@@ -192,5 +221,35 @@ export class DiagramzuClient {
 
   diagramUrl(id: string): string {
     return `${this.cfg.baseUrl}/app/d/${id}`;
+  }
+
+  listDecks(): Promise<{ decks: DeckSummary[] }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/decks`);
+  }
+
+  getDeck(id: string): Promise<DeckDetail> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/decks/${id}`);
+  }
+
+  createDeck(body: CreateDeckInput): Promise<{ deck: { id: string; title: string } }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/decks`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  updateDeck(
+    id: string,
+    body: UpdateDeckInput,
+  ): Promise<{ deck: { id: string; title: string } }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/decks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** Decks present at /app/present/:id (the full-bleed presentation surface). */
+  deckUrl(id: string): string {
+    return `${this.cfg.baseUrl}/app/present/${id}`;
   }
 }
