@@ -448,7 +448,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const lines = items.map((c) => {
         const kind = c.parentId ? "  ↳ reply" : c.nodeId ? `  @${c.nodeId}` : "  (diagram)";
         const flag = c.resolvedAt ? " [resolved]" : "";
-        const snippet = c.body.length > 60 ? `${c.body.slice(0, 60)}…` : c.body;
+        const snippet = c.body ? (c.body.length > 60 ? `${c.body.slice(0, 60)}…` : c.body) : "[deleted]";
         return `${c.id}${kind}${flag}  ${c.authorName ?? c.authorId}: ${snippet}`;
       });
       const summary = `${items.length} of ${total} comment${total === 1 ? "" : "s"}`;
