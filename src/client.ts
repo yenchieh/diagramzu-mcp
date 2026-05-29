@@ -35,6 +35,7 @@ export interface FolderRow {
 export interface DeckSummary {
   id: string;
   title: string;
+  updatedAt: string;
   slideCount: number;
 }
 
