@@ -331,10 +331,18 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "analyze_diagram",
     {
       description:
-        "Analyze a stored flowchart diagram's structure (nodes, edges, subgraphs) and return actionable findings — orphan nodes, over-connected hubs, cycles, disconnected clusters, and grouping suggestions. Flowchart diagrams only.",
+        "Analyze a stored flowchart diagram's structure (nodes, edges, subgraphs) and return actionable findings — orphan nodes, over-connected hubs, cycles, disconnected clusters, and grouping suggestions. Flowchart diagrams only. " +
+        "Set postAsComments: true to also persist each finding as a comment on the diagram (node-pinned where the finding names a single node) so a human reviewer sees them on the diagram surface.",
       inputSchema: {
         type: "object",
-        properties: { id: { type: "string", description: "Diagram UUID" } },
+        properties: {
+          id: { type: "string", description: "Diagram UUID" },
+          postAsComments: {
+            type: "boolean",
+            description:
+              "If true, persist each finding as a comment on the diagram instead of only returning ephemeral prose.",
+          },
+        },
         required: ["id"],
         additionalProperties: false,
       },
@@ -342,7 +350,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     async (args) => {
       const id = String(args.id ?? "");
       if (!id) throw new Error("id is required");
-      const { text } = await client.analyze(id);
+      const opts = typeof args.postAsComments === "boolean" ? { postAsComments: args.postAsComments } : undefined;
+      const { text } = await client.analyze(id, opts);
       return { content: [{ type: "text", text }] };
     },
   );
@@ -406,6 +415,73 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       return {
         content: [{ type: "text", text: `${header}\n\n${version.code}` }],
       };
+    },
+  );
+
+  server.registerTool(
+    "list_comments",
+    {
+      description:
+        "List comments on a diagram, oldest first. Returns id, parentId (null for a top-level comment), nodeId (the pinned node, if any), author, resolved state, and a body snippet. Use nodeId to fetch only the thread pinned to one node.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          diagramId: { type: "string", description: "Diagram UUID" },
+          nodeId: { type: "string", description: "Only comments pinned to this node id" },
+          includeResolved: { type: "boolean", description: "Include resolved threads (default true)" },
+          limit: { type: "number", description: "Max items (default 500, max 500)" },
+          offset: { type: "number", description: "Items to skip (default 0)" },
+        },
+        required: ["diagramId"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const diagramId = String(args.diagramId ?? "");
+      if (!diagramId) throw new Error("diagramId is required");
+      const params: { nodeId?: string; includeResolved?: boolean; limit?: number; offset?: number } = {};
+      if (typeof args.nodeId === "string") params.nodeId = args.nodeId;
+      if (typeof args.includeResolved === "boolean") params.includeResolved = args.includeResolved;
+      if (typeof args.limit === "number") params.limit = args.limit;
+      if (typeof args.offset === "number") params.offset = args.offset;
+      const { items, total } = await client.listComments(diagramId, params);
+      const lines = items.map((c) => {
+        const kind = c.parentId ? "  ↳ reply" : c.nodeId ? `  @${c.nodeId}` : "  (diagram)";
+        const flag = c.resolvedAt ? " [resolved]" : "";
+        const snippet = c.body.length > 60 ? `${c.body.slice(0, 60)}…` : c.body;
+        return `${c.id}${kind}${flag}  ${c.authorName ?? c.authorId}: ${snippet}`;
+      });
+      const summary = `${items.length} of ${total} comment${total === 1 ? "" : "s"}`;
+      return { content: [{ type: "text", text: [summary, ...lines].join("\n") }] };
+    },
+  );
+
+  server.registerTool(
+    "add_comment",
+    {
+      description:
+        "Post a comment on a diagram. Pass nodeId to pin it to a specific node, or parentId to reply to an existing top-level comment (threads are one level deep). The author is the API token's owner. Use this to leave structured review findings a human will see on the diagram.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          diagramId: { type: "string", description: "Diagram UUID" },
+          body: { type: "string", description: "Comment text (1–5000 chars)" },
+          nodeId: { type: "string", description: "Pin to this node id (top-level comments only)" },
+          parentId: { type: "string", description: "Reply to this top-level comment id" },
+        },
+        required: ["diagramId", "body"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const diagramId = String(args.diagramId ?? "");
+      const text = String(args.body ?? "");
+      if (!diagramId || !text) throw new Error("diagramId and body are required");
+      const payload: { body: string; nodeId?: string; parentId?: string } = { body: text };
+      if (typeof args.nodeId === "string") payload.nodeId = args.nodeId;
+      if (typeof args.parentId === "string") payload.parentId = args.parentId;
+      const { comment } = await client.addComment(diagramId, payload);
+      return { content: [{ type: "text", text: `Added: ${comment.id}\n${client.diagramUrl(diagramId)}` }] };
     },
   );
 }

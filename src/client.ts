@@ -90,8 +90,46 @@ export class DiagramzuClient {
     });
   }
 
-  analyze(id: string): Promise<{ text: string }> {
-    return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}/analysis`);
+  analyze(id: string, opts?: { postAsComments?: boolean }): Promise<{ text: string }> {
+    const qs = opts?.postAsComments ? "?postAsComments=true" : "";
+    return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}/analysis${qs}`);
+  }
+
+  listComments(
+    diagramId: string,
+    params: { nodeId?: string; includeResolved?: boolean; limit?: number; offset?: number },
+  ): Promise<{
+    items: Array<{
+      id: string;
+      parentId: string | null;
+      nodeId: string | null;
+      body: string;
+      resolvedAt: string | null;
+      authorId: string;
+      authorName: string | null;
+      createdAt: string;
+    }>;
+    total: number;
+  }> {
+    const search = new URLSearchParams();
+    if (params.nodeId) search.set("nodeId", params.nodeId);
+    if (params.includeResolved !== undefined) search.set("includeResolved", String(params.includeResolved));
+    if (params.limit !== undefined) search.set("limit", String(params.limit));
+    if (params.offset !== undefined) search.set("offset", String(params.offset));
+    const qs = search.toString();
+    return this.req(
+      `/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/comments${qs ? `?${qs}` : ""}`,
+    );
+  }
+
+  addComment(
+    diagramId: string,
+    body: { body: string; nodeId?: string; parentId?: string },
+  ): Promise<{ comment: { id: string } }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/comments`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   }
 
   // Look-up only. Returns the public share URL when an active link exists,
