@@ -65,6 +65,11 @@ export interface UpdateDeckInput {
 export class DiagramzuClient {
   constructor(private readonly cfg: DiagramzuConfig) {}
 
+  /** Site base URL (e.g. for building upgrade links in tool responses). */
+  get baseUrl(): string {
+    return this.cfg.baseUrl;
+  }
+
   private async req<T>(path: string, init: RequestInit = {}): Promise<T> {
     const res = await fetch(`${this.cfg.baseUrl}${path}`, {
       ...init,

@@ -1,5 +1,18 @@
 import type { DiagramzuClient } from "./client.js";
 
+// Parity-locked with apps/web/server/utils/planRules.ts. The web client and
+// this twin's client both normalize a non-2xx to `diagramzu API <status>:
+// <body>`, and the 402 body carries the stable `diagram_limit` token — so a
+// substring match turns the diagram-cap 402 into an agent-legible refusal.
+const DIAGRAM_LIMIT_ERROR = "diagram_limit";
+function diagramLimitRefusal(err: unknown, upgradeUrl: string): string | null {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes(DIAGRAM_LIMIT_ERROR)
+    ? `This space has reached its 50-diagram limit on the Free plan. Existing diagrams are ` +
+        `unaffected. The space owner can lift the limit by upgrading at ${upgradeUrl}, then try again.`
+    : null;
+}
+
 interface ToolHandler {
   (args: Record<string, unknown>): Promise<{ content: { type: "text"; text: string }[] }>;
 }
@@ -195,7 +208,15 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       }
       if (typeof args.description === "string") body.description = args.description;
       if (typeof args.folderId === "string") body.folderId = args.folderId;
-      const { diagram, warnings } = await client.create(body);
+      let created: Awaited<ReturnType<typeof client.create>>;
+      try {
+        created = await client.create(body);
+      } catch (e) {
+        const refusal = diagramLimitRefusal(e, `${client.baseUrl}/app/settings/billing`);
+        if (refusal) return { content: [{ type: "text", text: refusal }] };
+        throw e;
+      }
+      const { diagram, warnings } = created;
       // A brand-new diagram id can't have an active share link yet (POST
       // never mints one), so skip the lookup. update_diagram / get_diagram
       // still call it because the diagram may have been shared since.
