@@ -1,7 +1,18 @@
 export interface DiagramzuConfig {
+  /** Base URL for the REST API (e.g. the Go API host / in-cluster service). */
   baseUrl: string;
   token: string;
   spaceId: string;
+  /**
+   * Base URL used ONLY for the user-facing links in tool output
+   * (diagramUrl / deckUrl / share URL / upgrade link), e.g.
+   * "https://diagramzu.ai". Defaults to `baseUrl` when omitted.
+   *
+   * The remote MCP service calls the REST API at an internal `baseUrl` but must
+   * still show humans public diagramzu.ai URLs — set `siteBaseUrl` for that. For
+   * the stdio single-host use-case the two are the same, so it can be omitted.
+   */
+  siteBaseUrl?: string;
 }
 
 export interface DiagramSummary {
@@ -65,9 +76,18 @@ export interface UpdateDeckInput {
 export class DiagramzuClient {
   constructor(private readonly cfg: DiagramzuConfig) {}
 
-  /** Site base URL (e.g. for building upgrade links in tool responses). */
+  /** REST API base URL. Used for the underlying `fetch` calls. */
   get baseUrl(): string {
     return this.cfg.baseUrl;
+  }
+
+  /**
+   * Base URL for user-facing links shown in tool responses (upgrade link,
+   * diagram/deck/share URLs). Falls back to `baseUrl` when `siteBaseUrl` is
+   * not configured (the stdio single-host case).
+   */
+  get siteBaseUrl(): string {
+    return this.cfg.siteBaseUrl ?? this.cfg.baseUrl;
   }
 
   private async req<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -174,7 +194,7 @@ export class DiagramzuClient {
       const { link } = await this.req<{ link: { slug: string } | null }>(
         `/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/shares`,
       );
-      return link ? `${this.cfg.baseUrl}/s/${link.slug}` : null;
+      return link ? `${this.siteBaseUrl}/s/${link.slug}` : null;
     } catch {
       return null;
     }
@@ -226,7 +246,7 @@ export class DiagramzuClient {
   }
 
   diagramUrl(id: string): string {
-    return `${this.cfg.baseUrl}/app/d/${id}`;
+    return `${this.siteBaseUrl}/app/d/${id}`;
   }
 
   listDecks(): Promise<{ decks: DeckSummary[] }> {
@@ -256,6 +276,6 @@ export class DiagramzuClient {
 
   /** Decks present at /app/present/:id (the full-bleed presentation surface). */
   deckUrl(id: string): string {
-    return `${this.cfg.baseUrl}/app/present/${id}`;
+    return `${this.siteBaseUrl}/app/present/${id}`;
   }
 }

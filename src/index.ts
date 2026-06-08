@@ -1,13 +1,7 @@
 #!/usr/bin/env node
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { buildServer } from "./buildServer.js";
 import { DiagramzuClient } from "./client.js";
-import { SERVER_INSTRUCTIONS } from "./instructions.js";
-import { registerTools } from "./tools.js";
 
 const baseUrl = (process.env.DIAGRAMZU_BASE_URL ?? "").replace(/\/$/, "");
 const token = process.env.DIAGRAMZU_API_TOKEN ?? "";
@@ -20,37 +14,10 @@ if (!baseUrl || !token || !spaceId) {
   process.exit(1);
 }
 
+// stdio single-space use-case: REST and user-facing URLs are the same host,
+// so siteBaseUrl defaults to baseUrl.
 const client = new DiagramzuClient({ baseUrl, token, spaceId });
 
-const server = new Server(
-  { name: "diagramzu", version: "0.0.1" },
-  { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
-);
-
-interface ToolReg {
-  name: string;
-  spec: { description: string; inputSchema: Record<string, unknown> };
-  handler: (args: Record<string, unknown>) => Promise<{ content: { type: "text"; text: string }[] }>;
-}
-const tools: ToolReg[] = [];
-
-registerTools(
-  {
-    registerTool: (name, spec, handler) => {
-      tools.push({ name, spec, handler });
-    },
-  },
-  client,
-);
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: tools.map((t) => ({ name: t.name, description: t.spec.description, inputSchema: t.spec.inputSchema })),
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const tool = tools.find((t) => t.name === req.params.name);
-  if (!tool) throw new Error(`Unknown tool: ${req.params.name}`);
-  return await tool.handler(req.params.arguments ?? {});
-});
+const server = buildServer(client);
 
 await server.connect(new StdioServerTransport());

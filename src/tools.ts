@@ -212,7 +212,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       try {
         created = await client.create(body);
       } catch (e) {
-        const refusal = diagramLimitRefusal(e, `${client.baseUrl}/app/settings/billing`);
+        const refusal = diagramLimitRefusal(e, `${client.siteBaseUrl}/app/settings/billing`);
         if (refusal) return { content: [{ type: "text", text: refusal }] };
         throw e;
       }
