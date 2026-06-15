@@ -1,9 +1,9 @@
 import type { DiagramzuClient } from "./client.js";
 
-// Parity-locked with apps/web/server/utils/planRules.ts. The web client and
-// this twin's client both normalize a non-2xx to `diagramzu API <status>:
-// <body>`, and the 402 body carries the stable `diagram_limit` token — so a
-// substring match turns the diagram-cap 402 into an agent-legible refusal.
+// The client normalizes a non-2xx to `diagramzu API <status>: <body>`, and the
+// 402 body emitted by go-api's CreateDiagram (services/go-api/internal/handlers/
+// diagrams_write.go) carries the stable `diagram_limit` token + a `plan` field —
+// so a substring match turns the diagram-cap 402 into an agent-legible refusal.
 const DIAGRAM_LIMIT_ERROR = "diagram_limit";
 const RATE_LIMIT_ERROR = "API 429";
 // createRefusal turns the two create-path guards (Task 41) into agent-legible
