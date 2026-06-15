@@ -5,12 +5,37 @@ import type { DiagramzuClient } from "./client.js";
 // <body>`, and the 402 body carries the stable `diagram_limit` token — so a
 // substring match turns the diagram-cap 402 into an agent-legible refusal.
 const DIAGRAM_LIMIT_ERROR = "diagram_limit";
-function diagramLimitRefusal(err: unknown, upgradeUrl: string): string | null {
+const RATE_LIMIT_ERROR = "API 429";
+// createRefusal turns the two create-path guards (Task 41) into agent-legible
+// refusals, matched by substring on the normalized error string
+// `diagramzu API <status>: <body>` produced by the client:
+//   - 429                            → transient rate limit, retry
+//   - 402 diagram_limit, plan:"pro"  → fair-use ceiling, no upgrade (already Pro)
+//   - 402 diagram_limit, plan:"free" → upgrade CTA
+// Returns null for anything else so the caller rethrows.
+function createRefusal(err: unknown, upgradeUrl: string): string | null {
   const msg = err instanceof Error ? err.message : String(err);
-  return msg.includes(DIAGRAM_LIMIT_ERROR)
-    ? `This space has reached its 50-diagram limit on the Free plan. Existing diagrams are ` +
-        `unaffected. The space owner can lift the limit by upgrading at ${upgradeUrl}, then try again.`
-    : null;
+  if (msg.includes(RATE_LIMIT_ERROR)) {
+    return (
+      `This workspace is creating diagrams faster than allowed (a brief rate limit ` +
+      `that protects shared rendering). Wait a few seconds and try again.`
+    );
+  }
+  if (msg.includes(DIAGRAM_LIMIT_ERROR)) {
+    if (msg.includes('"plan":"pro"')) {
+      return (
+        `This workspace has reached its fair-use ceiling of 10,000 diagrams. Existing ` +
+        `diagrams are unaffected. Delete some you no longer need, or contact support if ` +
+        `your team genuinely needs a higher ceiling, then try again.`
+      );
+    }
+    return (
+      `This workspace has reached its 50-diagram limit on the Free plan. Existing diagrams ` +
+      `are unaffected. The space owner can lift the limit by upgrading at ${upgradeUrl}, ` +
+      `then try again.`
+    );
+  }
+  return null;
 }
 
 interface ToolHandler {
@@ -212,7 +237,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       try {
         created = await client.create(body);
       } catch (e) {
-        const refusal = diagramLimitRefusal(e, `${client.siteBaseUrl}/app/settings/billing`);
+        const refusal = createRefusal(e, `${client.siteBaseUrl}/app/settings/billing`);
         if (refusal) return { content: [{ type: "text", text: refusal }] };
         throw e;
       }
