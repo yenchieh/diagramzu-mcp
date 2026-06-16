@@ -4,6 +4,8 @@ MCP server for [diagramzu.ai](https://diagramzu.ai). Lets Claude Code, Claude De
 
 You author diagrams by talking to your AI — it stores them at `diagramzu.ai/d/<id>`, where your team can read and share them.
 
+> Available in the official [MCP Registry](https://registry.modelcontextprotocol.io) as `ai.diagramzu/mcp`.
+
 ## 1. Get a token
 
 Sign up at [diagramzu.ai](https://diagramzu.ai), then create an API token at [diagramzu.ai/app/settings/tokens](https://diagramzu.ai/app/settings/tokens). Tokens look like `dz_live_…` and are scoped to one Space — no separate space-id needed.
