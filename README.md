@@ -1,5 +1,7 @@
 # @diagramzu/mcp
 
+[![smithery badge](https://smithery.ai/badge/jack08300/diagramzu-mcp)](https://smithery.ai/server/jack08300/diagramzu-mcp)
+
 MCP server for [diagramzu.ai](https://diagramzu.ai). Lets Claude Code, Claude Desktop, Cursor, Windsurf, ChatGPT custom GPTs, and any [MCP](https://modelcontextprotocol.io) client read and write Mermaid diagrams in your Space.
 
 You author diagrams by talking to your AI — it stores them at `diagramzu.ai/d/<id>`, where your team can read and share them.
