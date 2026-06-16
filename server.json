@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.diagramzu/mcp",
+  "title": "DiagramZu",
+  "description": "Let Claude, Cursor, or ChatGPT author Mermaid diagrams your team can read and share.",
+  "version": "0.0.3",
+  "repository": {
+    "url": "https://github.com/yenchieh/diagramzu-mcp",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.diagramzu.ai/mcp"
+    }
+  ]
+}
