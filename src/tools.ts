@@ -264,9 +264,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       inputSchema: {
         type: "object",
         properties: {
-          id: { type: "string" },
-          title: { type: "string" },
-          code: { type: "string" },
+          id: { type: "string", description: "Diagram UUID" },
+          title: { type: "string", description: "Display name" },
+          code: { type: "string", description: "Mermaid source. Replaces the diagram's current code." },
           style: {
             type: "string",
             enum: ["midnight", "paper", "forest", "ocean", "mono"],
@@ -622,8 +622,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         type: "object",
         properties: {
           id: { type: "string", description: "Deck UUID" },
-          title: { type: "string" },
-          description: { type: "string" },
+          title: { type: "string", description: "Deck title shown in the deck list and above the presentation." },
+          description: { type: "string", description: "One-line summary of what the deck covers (≤1000 chars)." },
           slides: {
             type: "array",
             items: { type: "string" },
