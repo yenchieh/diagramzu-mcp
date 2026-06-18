@@ -138,7 +138,16 @@ export class DiagramzuClient {
     });
   }
 
-  update(id: string, body: { title?: string; code?: string; style?: string; styleOptions?: Record<string, unknown>; description?: string | null; createVersion?: boolean; versionLabel?: string; folderId?: string }): Promise<{ diagram: Diagram; versionId?: string; warnings?: string[] }> {
+  update(
+    id: string,
+    body: Record<string, unknown>,
+  ): Promise<{
+    diagram?: { id: string };
+    versionId?: string;
+    warnings?: string[];
+    status?: string;
+    proposalId?: string;
+  }> {
     return this.req(`/api/spaces/${this.cfg.spaceId}/diagrams/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),

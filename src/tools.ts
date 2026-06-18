@@ -260,7 +260,10 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     {
       description:
         "Update an existing diagram's title, description, mermaid source, visual style preset, and/or layout style options. " +
-        "When rewriting the source, keep or restore `class` assignments using the role names from this server's instructions so the diagram stays color-grouped.",
+        "When rewriting the source, keep or restore `class` assignments using the role names from this server's instructions so the diagram stays color-grouped." +
+        " In a workspace with proposal review enabled, your change is recorded as a " +
+        "proposal pending human approval rather than applied to the live diagram — " +
+        "in that case tell the user you've proposed the change and share the review URL.",
       inputSchema: {
         type: "object",
         properties: {
@@ -358,18 +361,30 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           "Provide at least one of title, code, style, styleOptions, description, or folderId.",
         );
       }
-      const { diagram, versionId, warnings } = await client.update(id, body);
-      const lines = [`Updated: ${diagram.id}`];
-      if (versionId) lines.push(`Snapshot: ${versionId}`);
-      lines.push(client.diagramUrl(diagram.id));
-      const shareUrl = await client.getActiveShareUrl(diagram.id);
-      if (shareUrl) lines.push(`Share: ${shareUrl}`);
-      if (warnings && warnings.length) {
-        lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
+      const res = await client.update(id, body);
+      if (res.status === "proposed") {
+        return {
+          content: [{
+            type: "text",
+            text:
+              "Change proposed — NOT applied yet. This workspace requires human " +
+              "approval before an agent's diagram changes go live. A reviewer must " +
+              "approve it here:\n" +
+              client.diagramUrl(id) +
+              "\n(Proposal id: " + (res.proposalId ?? "") + ")",
+          }],
+        };
       }
-      return {
-        content: [{ type: "text", text: lines.join("\n") }],
-      };
+      const diagramId = res.diagram?.id ?? id;
+      const lines = [`Updated: ${diagramId}`];
+      if (res.versionId) lines.push(`Snapshot: ${res.versionId}`);
+      lines.push(client.diagramUrl(diagramId));
+      const shareUrl = await client.getActiveShareUrl(diagramId);
+      if (shareUrl) lines.push(`Share: ${shareUrl}`);
+      if (res.warnings && res.warnings.length) {
+        lines.push("", "Warnings:", ...res.warnings.map((w) => `- ${w}`));
+      }
+      return { content: [{ type: "text", text: lines.join("\n") }] };
     },
   );
 
