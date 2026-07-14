@@ -38,7 +38,7 @@ Both \`class A,B edge\` (batch) and \`A[Browser]:::edge\` (inline) syntax work �
 
 Do not write \`classDef\` for these five names — Diagramzu injects the colors at render time. Custom colors not in the palette can use any other class name (e.g. \`classDef errorState fill:#dc2626\`).
 
-Layout is automatic — pass styleOptions.layout: "auto" (or omit) and the server picks the engine. Don't hand-tune layout unless the user asks. ELK handles subgraphs with explicit \`direction\` better than dagre; for any multi-subgraph flowchart prefer styleOptions.layout: "elk.layered".
+Layout is automatic — omit styleOptions.layout (or pass "auto") and the server picks the engine from the diagram's shape, including sending multi-subgraph topologies to elk.layered. Don't hand-tune layout unless the user asks; ELK handles subgraphs with explicit \`direction\` better than dagre.
 
 Side-by-side independent flows: wrap them in a parent subgraph with horizontal direction, then nest each flow as its own subgraph with vertical direction:
 
