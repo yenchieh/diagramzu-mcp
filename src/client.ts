@@ -110,7 +110,7 @@ export class DiagramzuClient {
   list(params?: {
     q?: string;
     owner?: string;
-    sort?: "created" | "updated" | "title";
+    sort?: "created" | "updated" | "title" | "relevance";
     folderId?: string;
   }): Promise<{ diagrams: DiagramSummary[] }> {
     // PARITY: mirror apps/web/server/utils/mcp/tools.ts InProcessClient.list —

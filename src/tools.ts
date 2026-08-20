@@ -58,15 +58,16 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         "List diagrams in the configured Space (every folder, newest first by default). " +
         "Use this BEFORE create_diagram to check whether a diagram with the target purpose already exists — " +
         "if it does, prefer update_diagram over creating a duplicate. " +
-        "Filter with `q` (case-insensitive substring on title or code) when looking for a named diagram " +
-        "(e.g. q: 'schema' or q: 'infra'). Sort with `sort: 'updated'` to find the most recently changed diagrams.",
+        "Filter with `q` (case-insensitive substring on title, description, or code) when looking for a named diagram " +
+        "(e.g. q: 'schema' or q: 'infra'). Sort with `sort: 'updated'` to find the most recently changed diagrams, " +
+        "or `sort: 'relevance'` when `q` is set so a title hit ranks above a description or code hit.",
       inputSchema: {
         type: "object",
         properties: {
           q: {
             type: "string",
             description:
-              "Case-insensitive substring search on title and code. Use when looking for a named diagram (e.g. 'schema', 'infra').",
+              "Case-insensitive substring search on title, description, or code. Use when looking for a named diagram (e.g. 'schema', 'infra').",
           },
           owner: {
             type: "string",
@@ -75,9 +76,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           },
           sort: {
             type: "string",
-            enum: ["created", "updated", "title"],
+            enum: ["created", "updated", "title", "relevance"],
             description:
-              "Sort order. 'created' (default) = newest-first by creation; 'updated' = newest-first by last edit (use this to find the most recently changed diagram); 'title' = alphabetical.",
+              "Sort order. 'created' (default) = newest-first by creation; 'updated' = newest-first by last edit (use this to find the most recently changed diagram); 'title' = alphabetical; 'relevance' = title hits first, then description, then code (only when `q` is set; otherwise same as 'updated').",
           },
           folderId: {
             type: "string",
@@ -89,10 +90,10 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       },
     },
     async (args) => {
-      const params: { q?: string; owner?: string; sort?: "created" | "updated" | "title"; folderId?: string } = {};
+      const params: { q?: string; owner?: string; sort?: "created" | "updated" | "title" | "relevance"; folderId?: string } = {};
       if (typeof args.q === "string") params.q = args.q;
       if (typeof args.owner === "string") params.owner = args.owner;
-      if (args.sort === "created" || args.sort === "updated" || args.sort === "title") {
+      if (args.sort === "created" || args.sort === "updated" || args.sort === "title" || args.sort === "relevance") {
         params.sort = args.sort;
       }
       if (typeof args.folderId === "string") params.folderId = args.folderId;
