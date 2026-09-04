@@ -93,8 +93,15 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const params: { q?: string; owner?: string; sort?: "created" | "updated" | "title" | "relevance"; folderId?: string } = {};
       if (typeof args.q === "string") params.q = args.q;
       if (typeof args.owner === "string") params.owner = args.owner;
+      // This tool documents `created` as its default (newest-first by creation).
+      // Send it EXPLICITLY rather than relying on the REST default: card 82
+      // changed the server's unspecified-sort default from created_at DESC to
+      // updated_at DESC to match what the SPA labels its rows, and agent-facing
+      // behaviour must not move with it.
       if (args.sort === "created" || args.sort === "updated" || args.sort === "title" || args.sort === "relevance") {
         params.sort = args.sort;
+      } else {
+        params.sort = "created";
       }
       if (typeof args.folderId === "string") params.folderId = args.folderId;
       const { diagrams } = await client.list(params);
