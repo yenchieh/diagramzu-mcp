@@ -1,4 +1,4 @@
-import type { DiagramzuClient } from "./client.js";
+import type { Actor, DiagramzuClient } from "./client.js";
 
 // The client normalizes a non-2xx to `diagramzu API <status>: <body>`, and the
 // 402 body emitted by go-api's CreateDiagram (services/go-api/internal/handlers/
@@ -36,6 +36,26 @@ function createRefusal(err: unknown, upgradeUrl: string): string | null {
     );
   }
   return null;
+}
+
+// ── actor attribution (card 84) ───────────────────────────────────────────────
+// The API returns an `actor` object per write ({kind, userId, tokenName}); an
+// agent write carries a non-empty tokenName. Both helpers are defensive on
+// purpose: this package is published to npm and can be pointed at a go-api
+// older than card 84, which omits the field entirely. No actor, or a `user`
+// actor, formats exactly as it did before the card.
+
+/** The one extra `get_diagram` line, or null when the last write was a human's. */
+function agentTokenLine(actor: Actor | undefined): string | null {
+  const name = agentTokenName(actor);
+  return name ? `Last updated by agent token \`${name}\`` : null;
+}
+
+/** The token name when `actor` is an agent, else null. */
+function agentTokenName(actor: Actor | undefined): string | null {
+  if (!actor || actor.kind !== "agent") return null;
+  const name = actor.tokenName;
+  return name ? name : null;
 }
 
 interface ToolHandler {
@@ -153,6 +173,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const shareUrl = await client.getActiveShareUrl(diagram.id);
       const sections = [`# ${diagram.title}`];
       if (diagram.description) sections.push(`> ${diagram.description}`);
+      const agentLine = agentTokenLine(diagram.updatedActor);
+      if (agentLine) sections.push(agentLine);
       const footer = shareUrl ? `---\nOpen: ${url}\nShare: ${shareUrl}` : `---\nOpen: ${url}`;
       sections.push(diagram.code, footer);
       return {
@@ -441,9 +463,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (typeof args.limit === "number") params.limit = args.limit;
       if (typeof args.offset === "number") params.offset = args.offset;
       const { items, total } = await client.listVersions(diagramId, params);
-      const lines = items.map(
-        (v) => `${v.id}  ${v.label ?? "(no label)"}  ${v.title}  (${v.createdAt})`,
-      );
+      const lines = items.map((v) => {
+        const row = `${v.id}  ${v.label ?? "(no label)"}  ${v.title}  (${v.createdAt})`;
+        const agent = agentTokenName(v.actor);
+        return agent ? `${row}  (agent: ${agent})` : row;
+      });
       const summary = `${items.length} of ${total} version${total === 1 ? "" : "s"}`;
       return {
         content: [{ type: "text", text: [summary, ...lines].join("\n") }],

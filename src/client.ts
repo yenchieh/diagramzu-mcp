@@ -15,11 +15,29 @@ export interface DiagramzuConfig {
   siteBaseUrl?: string;
 }
 
+/**
+ * Who performed a write (card 84). `kind` is derived server-side from the
+ * presence of an acting API-token name: a write made through a bearer token
+ * (MCP / OAuth) is `"agent"`, a write made in the browser editor is `"user"`.
+ * `tokenName` is the token's name as it was at write time — a snapshot, not a
+ * reference, because OAuth access-token rows are rotated away within the hour.
+ *
+ * Older rows predate the column and always report `kind: "user"` with a null
+ * `tokenName`: their acting token was never recorded and cannot be recovered.
+ */
+export interface Actor {
+  kind: "agent" | "user";
+  userId: string;
+  tokenName: string | null;
+}
+
 export interface DiagramSummary {
   id: string;
   title: string;
   updatedAt: string;
   createdAt: string;
+  createdActor?: Actor;
+  updatedActor?: Actor;
 }
 
 export interface Diagram {
@@ -32,6 +50,8 @@ export interface Diagram {
   createdAt: string;
   updatedBy: string;
   updatedAt: string;
+  createdActor?: Actor;
+  updatedActor?: Actor;
 }
 
 export interface FolderRow {
@@ -220,6 +240,9 @@ export class DiagramzuClient {
       title: string;
       createdAt: string;
       createdBy: string;
+      // Optional: a go-api older than card 84 omits it. Formatting degrades to
+      // the pre-84 row rather than printing "undefined".
+      actor?: Actor;
     }>;
     total: number;
   }> {

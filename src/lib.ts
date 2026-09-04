@@ -7,6 +7,7 @@ export { buildServer } from "./buildServer.js";
 export { DiagramzuClient } from "./client.js";
 export type {
   DiagramzuConfig,
+  Actor,
   Diagram,
   DiagramSummary,
   FolderRow,
