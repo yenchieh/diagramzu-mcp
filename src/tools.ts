@@ -267,7 +267,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       try {
         created = await client.create(body);
       } catch (e) {
-        const refusal = createRefusal(e, `${client.siteBaseUrl}/app/settings/billing`);
+        const refusal = createRefusal(e, `${client.siteBaseUrl}/app/settings/plan`);
         if (refusal) return { content: [{ type: "text", text: refusal }] };
         throw e;
       }
