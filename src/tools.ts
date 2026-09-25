@@ -658,7 +658,15 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       }
       const { deck } = await client.createDeck(body);
       return {
-        content: [{ type: "text", text: [`Created deck: ${deck.id}`, client.deckUrl(deck.id)].join("\n") }],
+        content: [{ type: "text", text: [
+          `Created deck: ${deck.id}`,
+          // LABEL the URL in the OUTPUT, not only in the description. The
+          // description is read once when the tool list loads; this line is what
+          // gets pasted to a human, and an unlabelled /app/present URL is exactly
+          // the link that bounces them to sign-in (card 130).
+          `Present (space members only): ${client.deckUrl(deck.id)}`,
+          "To share it outside the Space, open the deck in DiagramZu and use its Share button — that mints a public read-only link.",
+        ].join("\n") }],
       };
     },
   );
@@ -699,7 +707,10 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       }
       const { deck } = await client.updateDeck(id, body);
       return {
-        content: [{ type: "text", text: [`Updated deck: ${deck.id}`, client.deckUrl(deck.id)].join("\n") }],
+        content: [{ type: "text", text: [
+          `Updated deck: ${deck.id}`,
+          `Present (space members only): ${client.deckUrl(deck.id)}`,
+        ].join("\n") }],
       };
     },
   );
