@@ -306,7 +306,18 @@ export class DiagramzuClient {
     });
   }
 
-  /** Decks present at /app/present/:id (the full-bleed presentation surface). */
+  /**
+   * Decks present at /app/present/:id (the full-bleed presentation surface).
+   *
+   * MEMBERS ONLY. This path is behind the /app auth guard, so a stakeholder who
+   * receives it is bounced to sign-in — which is why every tool description that
+   * returns it says so, and why none of them calls it a URL "to share".
+   *
+   * The public link is /s/p/:slug (card 130), minted from the deck's Share
+   * button in the app. It is deliberately NOT mintable from here: publishing a
+   * Space's content is a human decision, not an agent's. If that ever changes it
+   * needs its own tool and its own consent story, not a wording change.
+   */
   deckUrl(id: string): string {
     return `${this.siteBaseUrl}/app/present/${id}`;
   }

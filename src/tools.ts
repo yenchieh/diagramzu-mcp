@@ -618,7 +618,10 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const slideLines = slides.length
         ? slides.map((s, i) => `${i + 1}. ${s.diagramId}  ${s.title}`).join("\n")
         : "(no slides yet)";
-      sections.push(slideLines, `---\nPresent: ${client.deckUrl(deck.id)}`);
+      sections.push(
+        slideLines,
+        `---\nPresent (space members only): ${client.deckUrl(deck.id)}\nTo share outside the Space, open the deck and use its Share button to mint a public link.`,
+      );
       return { content: [{ type: "text", text: sections.join("\n\n") }] };
     },
   );
@@ -627,7 +630,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "create_deck",
     {
       description:
-        "Create a presentation deck from existing diagrams. Pass `slides` as the complete ordered list of diagram ids — the deck plays them as a slideshow in that order. Typical flow: create_diagram for each slide, collect the returned ids, then create_deck with those ids in presentation order. Returns the deck id and the present URL to share. Diagram ids must already exist in this Space (use list_diagrams to find them).",
+        "Create a presentation deck from existing diagrams. Pass `slides` as the complete ordered list of diagram ids — the deck plays them as a slideshow in that order. Typical flow: create_diagram for each slide, collect the returned ids, then create_deck with those ids in presentation order. Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link. To share the deck outside the Space, the owner opens it in DiagramZu and uses its Share button, which mints a public read-only presentation link. Diagram ids must already exist in this Space (use list_diagrams to find them).",
       inputSchema: {
         type: "object",
         properties: {
@@ -664,7 +667,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "update_deck",
     {
       description:
-        "Update a deck's title, description, and/or slide order. `slides` is DECLARATIVE: pass the complete desired ordered list of diagram ids — reorder, add, and remove are all expressed by sending the new full list (any id omitted is removed from the deck; new ids are appended in the order given). Returns the deck id and present URL.",
+        "Update a deck's title, description, and/or slide order. `slides` is DECLARATIVE: pass the complete desired ordered list of diagram ids — reorder, add, and remove are all expressed by sending the new full list (any id omitted is removed from the deck; new ids are appended in the order given). Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link (see create_deck).",
       inputSchema: {
         type: "object",
         properties: {
