@@ -93,6 +93,15 @@ export interface UpdateDeckInput {
   slides?: string[];
 }
 
+/**
+ * The result of an active-public-link lookup. `unknown` means the lookup did
+ * not complete — NOT that there is no link. Never render it as a negative.
+ */
+export type ActiveShareLookup =
+  | { state: "link"; url: string }
+  | { state: "none" }
+  | { state: "unknown" };
+
 export class DiagramzuClient {
   constructor(private readonly cfg: DiagramzuConfig) {}
 
@@ -216,16 +225,32 @@ export class DiagramzuClient {
     });
   }
 
-  // Look-up only. Returns the public share URL when an active link exists,
-  // null otherwise. Mirrors apps/web/server/utils/mcp/tools.ts. Fail-open.
-  async getActiveShareUrl(diagramId: string): Promise<string | null> {
+  /**
+   * Look-up only: does this diagram have an active public link?
+   *
+   * THREE states, not two (card 136 fold 2, M1). This used to collapse
+   * "the API said there is no link" and "the call failed" into a single
+   * `null`, and `get_diagram` printed that null as the confident sentence
+   * "No public link yet". The fold reviewer drove the built handler against a
+   * stub whose `/shares` answered 500 and then 429 **while a live link
+   * existed**, and the tool told the agent the diagram was private. An agent
+   * acting on that goes and mints a second link, or tells a human their
+   * diagram is not shared when it is.
+   *
+   * Fail-open is still the right POLICY — a flaky shares lookup must not fail
+   * a `get_diagram` — but the failure has to be legible to the caller instead
+   * of being laundered into a fact. Hence `unknown`.
+   */
+  async lookupActiveShare(diagramId: string): Promise<ActiveShareLookup> {
     try {
       const { link } = await this.req<{ link: { slug: string } | null }>(
         `/api/spaces/${this.cfg.spaceId}/diagrams/${diagramId}/shares`,
       );
-      return link ? `${this.siteBaseUrl}/s/${link.slug}` : null;
+      return link
+        ? { state: "link", url: `${this.siteBaseUrl}/s/${link.slug}` }
+        : { state: "none" };
     } catch {
-      return null;
+      return { state: "unknown" };
     }
   }
 

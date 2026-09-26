@@ -9,7 +9,7 @@
 export const SERVER_INSTRUCTIONS = `Diagramzu stores diagrams that humans read and share. Workflow:
 1. Before creating: call list_diagrams to check if one on the same topic exists — prefer update_diagram over duplicating.
 2. Before placing in a folder: call list_folders.
-3. After creating/updating, give the user the returned URL — say that it opens for members of their Space. It is NOT a public link: a public, read-only link is minted by a person, from the diagram's or deck's Share button in DiagramZu.
+3. After creating/updating, give the user the returned URL and say who can open it. The \`Open (space members only)\` URL opens for members of their Space only. A \`Share (public, read-only)\` line, when one is present, IS the public link — pass that one on to anyone outside the Space. When no Share line is present, a public link is minted by a person, from the diagram's or deck's Share button in DiagramZu.
 4. When substantially rewriting an existing diagram's code, pass createVersion: true (optionally with versionLabel) so the prior state is snapshotted first.
 5. Match the user's language — title, description, and node labels should use the language they wrote in.
 

@@ -164,7 +164,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     {
       description:
         "Fetch one diagram by id. Returns its title, description (the agent's brief), mermaid source code, and its URL in the app — which only members of this Space can open. " +
-        "If the diagram already has a public link, that link is reported separately on a `Share:` line; a public link is minted by a person, from the diagram's Share button. " +
+        "If the diagram already has a public link, that link is reported separately on a `Share (public, read-only):` line; a public link is minted by a person, from the diagram's Share button. " +
         "Read the description before editing — it tells you what the diagram is for and when to update it.",
       inputSchema: {
         type: "object",
@@ -178,14 +178,22 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (!id) throw new Error("id is required");
       const { diagram } = await client.get(id);
       const url = client.diagramUrl(diagram.id);
-      const shareUrl = await client.getActiveShareUrl(diagram.id);
+      const share = await client.lookupActiveShare(diagram.id);
       const sections = [`# ${diagram.title}`];
       if (diagram.description) sections.push(`> ${diagram.description}`);
       const agentLine = agentTokenLine(diagram.updatedActor);
       if (agentLine) sections.push(agentLine);
-      const footer = shareUrl
-        ? `---\nOpen (space members only): ${url}\nShare (public, read-only): ${shareUrl}`
-        : `---\nOpen (space members only): ${url}\nNo public link yet — the owner mints one from the diagram's Share button.`;
+      // THREE states (fold 2, M1). The negative sentence is printed ONLY when the
+      // API actually said `link: null`. When the lookup failed we say so instead
+      // of asserting the diagram is private — a lookup that 500s while a live
+      // link exists used to print "No public link yet".
+      const shareLine =
+        share.state === "link"
+          ? `Share (public, read-only): ${share.url}`
+          : share.state === "none"
+            ? "No public link yet — someone in the Space mints one from the diagram's Share button."
+            : "Couldn't check for a public link just now — this says nothing about whether one exists.";
+      const footer = `---\nOpen (space members only): ${url}\n${shareLine}`;
       sections.push(diagram.code, footer);
       return {
         content: [{ type: "text", text: sections.join("\n\n") }],
@@ -198,7 +206,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     {
       description:
         "Create a new diagram in the Space. Returns its id and its URL in the app, which only members of this Space can open — it is NOT a shareable link. " +
-        "To show the diagram to anyone outside the Space, the owner opens it in DiagramZu and uses its Share button, which mints a public read-only link. " +
+        "To show the diagram to anyone outside the Space, someone in the Space opens it in DiagramZu and uses its Share button, which mints a public read-only link. " +
         "See this server's instructions for diagram-type selection and `class` role names (`edge`/`core`/`data`/`accent`/`muted`) for color-grouping.",
       inputSchema: {
         type: "object",
@@ -411,7 +419,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
               "Change proposed — NOT applied yet. This workspace requires human " +
               "approval before an agent's diagram changes go live. A reviewer must " +
               "approve it here:\n" +
-              client.diagramUrl(id) +
+              // fold 2, S3: labelled like every other URL this server prints.
+              `Open (space members only): ${client.diagramUrl(id)}` +
               "\n(Proposal id: " + (res.proposalId ?? "") + ")",
           }],
         };
@@ -420,8 +429,10 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const lines = [`Updated: ${diagramId}`];
       if (res.versionId) lines.push(`Snapshot: ${res.versionId}`);
       lines.push(`Open (space members only): ${client.diagramUrl(diagramId)}`);
-      const shareUrl = await client.getActiveShareUrl(diagramId);
-      if (shareUrl) lines.push(`Share (public, read-only): ${shareUrl}`);
+      // Same three-state lookup. This tool has never printed a NEGATIVE line, so
+      // `none` and `unknown` both print nothing — it asserts only what it knows.
+      const share = await client.lookupActiveShare(diagramId);
+      if (share.state === "link") lines.push(`Share (public, read-only): ${share.url}`);
       if (res.warnings && res.warnings.length) {
         lines.push("", "Warnings:", ...res.warnings.map((w) => `- ${w}`));
       }
@@ -646,7 +657,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "create_deck",
     {
       description:
-        "Create a presentation deck from existing diagrams. Pass `slides` as the complete ordered list of diagram ids — the deck plays them as a slideshow in that order. Typical flow: create_diagram for each slide, collect the returned ids, then create_deck with those ids in presentation order. Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link. To share the deck outside the Space, the owner opens it in DiagramZu and uses its Share button, which mints a public read-only presentation link. Diagram ids must already exist in this Space (use list_diagrams to find them).",
+        "Create a presentation deck from existing diagrams. Pass `slides` as the complete ordered list of diagram ids — the deck plays them as a slideshow in that order. Typical flow: create_diagram for each slide, collect the returned ids, then create_deck with those ids in presentation order. Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link. To share the deck outside the Space, someone in the Space opens it in DiagramZu and uses its Share button, which mints a public read-only presentation link. Diagram ids must already exist in this Space (use list_diagrams to find them).",
       inputSchema: {
         type: "object",
         properties: {
@@ -691,7 +702,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "update_deck",
     {
       description:
-        "Update a deck's title, description, and/or slide order. `slides` is DECLARATIVE: pass the complete desired ordered list of diagram ids — reorder, add, and remove are all expressed by sending the new full list (any id omitted is removed from the deck; new ids are appended in the order given). Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link. To share the deck outside the Space, the owner opens it in DiagramZu and uses its Share button, which mints a public read-only link.",
+        "Update a deck's title, description, and/or slide order. `slides` is DECLARATIVE: pass the complete desired ordered list of diagram ids — reorder, add, and remove are all expressed by sending the new full list (any id omitted is removed from the deck; new ids are appended in the order given). Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link. To share the deck outside the Space, someone in the Space opens it in DiagramZu and uses its Share button, which mints a public read-only link.",
       inputSchema: {
         type: "object",
         properties: {
