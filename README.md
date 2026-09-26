@@ -92,10 +92,13 @@ someone outside your Space:
 
 The tools hand back the `/app/…` URLs, so a link pasted straight out of a chat is
 a members-only one: send it to someone outside the Space and they land on
-sign-in. Publishing is a person's decision, not an agent's — open the diagram or
-deck in DiagramZu and use its Share button to mint the public link. Once a
-diagram has one, `get_diagram` and `update_diagram` report it on a `Share:` line
-of their own.
+sign-in. To publish, open the diagram or deck in DiagramZu and use its Share
+button. **This MCP server deliberately ships no tool that mints a public link** —
+not because a token cannot (a `dz_live_…` token can mint one over the REST API),
+but because publishing a Space's content should be a deliberate human action
+rather than a side effect of a conversation. Once a diagram has a public link,
+`get_diagram` and `update_diagram` report it on a `Share (public, read-only):`
+line of their own.
 
 ## Show off your setup
 

@@ -163,7 +163,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "get_diagram",
     {
       description:
-        "Fetch one diagram by id. Returns its title, description (the agent's brief), mermaid source code, and a shareable URL. " +
+        "Fetch one diagram by id. Returns its title, description (the agent's brief), mermaid source code, and its URL in the app — which only members of this Space can open. " +
+        "If the diagram already has a public link, that link is reported separately on a `Share:` line; a public link is minted by a person, from the diagram's Share button. " +
         "Read the description before editing — it tells you what the diagram is for and when to update it.",
       inputSchema: {
         type: "object",
@@ -182,7 +183,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (diagram.description) sections.push(`> ${diagram.description}`);
       const agentLine = agentTokenLine(diagram.updatedActor);
       if (agentLine) sections.push(agentLine);
-      const footer = shareUrl ? `---\nOpen: ${url}\nShare: ${shareUrl}` : `---\nOpen: ${url}`;
+      const footer = shareUrl
+        ? `---\nOpen (space members only): ${url}\nShare (public, read-only): ${shareUrl}`
+        : `---\nOpen (space members only): ${url}\nNo public link yet — the owner mints one from the diagram's Share button.`;
       sections.push(diagram.code, footer);
       return {
         content: [{ type: "text", text: sections.join("\n\n") }],
@@ -194,7 +197,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "create_diagram",
     {
       description:
-        "Create a new diagram in the Space. Returns its id and shareable URL. " +
+        "Create a new diagram in the Space. Returns its id and its URL in the app, which only members of this Space can open — it is NOT a shareable link. " +
+        "To show the diagram to anyone outside the Space, the owner opens it in DiagramZu and uses its Share button, which mints a public read-only link. " +
         "See this server's instructions for diagram-type selection and `class` role names (`edge`/`core`/`data`/`accent`/`muted`) for color-grouping.",
       inputSchema: {
         type: "object",
@@ -275,7 +279,14 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       // A brand-new diagram id can't have an active share link yet (POST
       // never mints one), so skip the lookup. update_diagram / get_diagram
       // still call it because the diagram may have been shared since.
-      const lines = [`Created: ${diagram.id}`, client.diagramUrl(diagram.id)];
+      // LABEL THE URL IN THE OUTPUT, not only in the description (card 130). The
+      // description is read once when the tool list loads; THIS line is what gets
+      // pasted to a human, and an unlabelled /app/d URL is exactly the link that
+      // bounces them to sign-in.
+      const lines = [
+        `Created: ${diagram.id}`,
+        `Open (space members only): ${client.diagramUrl(diagram.id)}`,
+      ];
       if (warnings && warnings.length) {
         lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
       }
@@ -408,9 +419,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const diagramId = res.diagram?.id ?? id;
       const lines = [`Updated: ${diagramId}`];
       if (res.versionId) lines.push(`Snapshot: ${res.versionId}`);
-      lines.push(client.diagramUrl(diagramId));
+      lines.push(`Open (space members only): ${client.diagramUrl(diagramId)}`);
       const shareUrl = await client.getActiveShareUrl(diagramId);
-      if (shareUrl) lines.push(`Share: ${shareUrl}`);
+      if (shareUrl) lines.push(`Share (public, read-only): ${shareUrl}`);
       if (res.warnings && res.warnings.length) {
         lines.push("", "Warnings:", ...res.warnings.map((w) => `- ${w}`));
       }
@@ -574,7 +585,12 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (typeof args.nodeId === "string") payload.nodeId = args.nodeId;
       if (typeof args.parentId === "string") payload.parentId = args.parentId;
       const { comment } = await client.addComment(diagramId, payload);
-      return { content: [{ type: "text", text: `Added: ${comment.id}\n${client.diagramUrl(diagramId)}` }] };
+      return {
+        content: [{
+          type: "text",
+          text: `Added: ${comment.id}\nOpen (space members only): ${client.diagramUrl(diagramId)}`,
+        }],
+      };
     },
   );
 
@@ -675,7 +691,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     "update_deck",
     {
       description:
-        "Update a deck's title, description, and/or slide order. `slides` is DECLARATIVE: pass the complete desired ordered list of diagram ids — reorder, add, and remove are all expressed by sending the new full list (any id omitted is removed from the deck; new ids are appended in the order given). Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link (see create_deck).",
+        "Update a deck's title, description, and/or slide order. `slides` is DECLARATIVE: pass the complete desired ordered list of diagram ids — reorder, add, and remove are all expressed by sending the new full list (any id omitted is removed from the deck; new ids are appended in the order given). Returns the deck id and the present URL, which only members of this Space can open — it is NOT a shareable link. To share the deck outside the Space, the owner opens it in DiagramZu and uses its Share button, which mints a public read-only link.",
       inputSchema: {
         type: "object",
         properties: {

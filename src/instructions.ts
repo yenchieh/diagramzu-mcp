@@ -1,10 +1,15 @@
 // Server-level guidance returned to MCP clients via the `instructions` field.
-// Must stay byte-identical to apps/web/server/utils/mcp/instructions.ts.
-// Guarded by apps/web/tests/unit/mcpInstructionsParity.test.ts.
+//
+// The two lines that used to be here — "must stay byte-identical to
+// apps/web/server/utils/mcp/instructions.ts", "guarded by
+// apps/web/tests/unit/mcpInstructionsParity.test.ts" — named a file and a test
+// that no longer exist: the in-Nuxt MCP twin was deleted in the Task 32 Go
+// migration, and the parity test went with it. This file is the single source
+// (CLAUDE.md says so), and nothing guards it but review.
 export const SERVER_INSTRUCTIONS = `Diagramzu stores diagrams that humans read and share. Workflow:
 1. Before creating: call list_diagrams to check if one on the same topic exists — prefer update_diagram over duplicating.
 2. Before placing in a folder: call list_folders.
-3. After creating/updating, share the returned URL with the user.
+3. After creating/updating, give the user the returned URL — say that it opens for members of their Space. It is NOT a public link: a public, read-only link is minted by a person, from the diagram's or deck's Share button in DiagramZu.
 4. When substantially rewriting an existing diagram's code, pass createVersion: true (optionally with versionLabel) so the prior state is snapshotted first.
 5. Match the user's language — title, description, and node labels should use the language they wrote in.
 
