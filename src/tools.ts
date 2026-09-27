@@ -211,8 +211,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       inputSchema: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Display name" },
-          code: { type: "string", description: "Mermaid source. Defaults to a tiny flowchart." },
+          title: { type: "string", description: "Display name (≤200 chars)" },
+          code: { type: "string", description: "Mermaid source (≤50,000 bytes). Defaults to a tiny flowchart." },
           style: {
             type: "string",
             enum: ["midnight", "paper", "forest", "ocean", "mono"],
@@ -317,8 +317,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         type: "object",
         properties: {
           id: { type: "string", description: "Diagram UUID" },
-          title: { type: "string", description: "Display name" },
-          code: { type: "string", description: "Mermaid source. Replaces the diagram's current code." },
+          title: { type: "string", description: "Display name (≤200 chars)" },
+          code: { type: "string", description: "Mermaid source (≤50,000 bytes). Replaces the diagram's current code." },
           style: {
             type: "string",
             enum: ["midnight", "paper", "forest", "ocean", "mono"],
@@ -661,7 +661,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       inputSchema: {
         type: "object",
         properties: {
-          title: { type: "string", description: "Deck title shown in the deck list and above the presentation." },
+          title: { type: "string", description: "Deck title shown in the deck list and above the presentation (≤200 chars)." },
           description: {
             type: "string",
             description: "Optional one-line summary of what the deck covers (≤1000 chars).",
@@ -707,7 +707,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         type: "object",
         properties: {
           id: { type: "string", description: "Deck UUID" },
-          title: { type: "string", description: "Deck title shown in the deck list and above the presentation." },
+          title: { type: "string", description: "Deck title shown in the deck list and above the presentation (≤200 chars)." },
           description: { type: "string", description: "One-line summary of what the deck covers (≤1000 chars)." },
           slides: {
             type: "array",
