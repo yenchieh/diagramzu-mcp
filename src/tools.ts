@@ -52,21 +52,34 @@ async function scoped(
   // /api/token/spaces call to produce an error — same verdict, one wasted
   // round trip, and two spellings of "nothing".
   const raw = typeof args.space === "string" ? args.space.trim() : args.space;
+
+  // THE D3 CELL: an account-scoped token whose DEFAULT workspace it has lost,
+  // while others are still reachable. go-api deliberately keeps whoami at 200
+  // there so the token stays usable — but a call that lands on the default has
+  // nowhere to go, and saying so beats a bare 401 from the API.
+  //
+  // FOLD 2, F2 — THIS CHECK NOW COVERS BOTH WAYS OF LANDING ON THE DEFAULT:
+  // omitting `space`, and naming the default's id EXPLICITLY. The S5
+  // short-circuit below used to return the client before anything looked at
+  // reachability, so an agent that spelled out the id — which is exactly what
+  // SERVER_INSTRUCTIONS step 6 asks of it — got the bare 401 while an agent
+  // that omitted the argument got the message. Same dead token, same remedy,
+  // two different experiences depending on how explicit the agent was.
+  //
+  // `=== false`, not `!`: the flag is an EXCEPTION marker. A client that does
+  // not carry it at all (an older go-api, or an in-process host that builds
+  // its own) has told us nothing, and "nothing" must read as the ordinary
+  // case — otherwise every such caller is refused on every call.
+  const landsOnDefault =
+    raw === undefined || raw === null || raw === "" || raw === client.spaceId;
+  if (landsOnDefault && client.defaultReachable === false) {
+    throw new Error(
+      "This token's default workspace is no longer reachable (you may have been removed from it, " +
+        "or it was deleted). Call list_spaces and pass `space` explicitly.",
+    );
+  }
+
   if (raw === undefined || raw === null || raw === "") {
-    // THE D3 CELL: an account-scoped token whose DEFAULT workspace it has
-    // lost, while others are still reachable. go-api deliberately keeps
-    // whoami at 200 there so the token stays usable — but a call with no
-    // `space` has nowhere to go, and saying so beats a bare 401 from the API.
-    // `=== false`, not `!`: the flag is an EXCEPTION marker. A client that
-    // does not carry it at all (an older go-api, or an in-process host that
-    // builds its own) has told us nothing, and "nothing" must read as the
-    // ordinary case — otherwise every such caller is refused on every call.
-    if (client.defaultReachable === false) {
-      throw new Error(
-        "This token's default workspace is no longer reachable (you may have been removed from it, " +
-          "or it was deleted). Call list_spaces and pass `space` explicitly.",
-      );
-    }
     return client;
   }
   if (typeof raw !== "string") {
@@ -83,7 +96,7 @@ async function scoped(
   // it, which is the single failure this resolver exists to prevent. The slug
   // is unique too, but the client is not told its own slug by whoami, so
   // there is nothing here to compare against.
-  if (raw === client.spaceId) return client;
+  if (raw === client.spaceId) return client; // reachability settled above
   const spaces = await client.listSpaces();
   const res = resolveSpace(raw, spaces);
   if (!res.ok) throw new Error(res.error);
