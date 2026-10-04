@@ -78,6 +78,16 @@ async function scoped(
         "or it was deleted). Call list_spaces and pass `space` explicitly.",
     );
   }
+  // CARD 161: the stdio server now starts even when its startup token check
+  // failed, possibly with no default at all. Without this, the call below
+  // would request `/api/spaces//…` and surface a bare 404.
+  if (landsOnDefault && client.spaceId === "") {
+    throw new Error(
+      "This connection has no default workspace: the token check at startup failed (see the server log). " +
+        "Fix DIAGRAMZU_BASE_URL / DIAGRAMZU_API_TOKEN and restart, set DIAGRAMZU_SPACE_ID, " +
+        "or call list_spaces and pass `space` explicitly.",
+    );
+  }
 
   if (raw === undefined || raw === null || raw === "") {
     return client;

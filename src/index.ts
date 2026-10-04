@@ -33,17 +33,27 @@ if (!baseUrl || !token) {
  * told it is single-space and `list_spaces` would say so, wrongly.
  */
 async function resolveConfig(): Promise<DiagramzuConfig> {
-  const res = await fetch(`${baseUrl}/api/token/whoami`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  // CARD 161: a failed check is REPORTED, never fatal. Registries (Glama)
+  // install this package and list its tools with placeholder credentials, and
+  // a client may start us while offline; 0.10 exited here and both broke. We
+  // start with the pinned space (0.0.9's behaviour) or none, and a call that
+  // lands on a missing default says so (tools.ts `scoped()`).
+  const fallback: DiagramzuConfig = { baseUrl, token, spaceId };
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/api/token/whoami`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    console.error(`[diagramzu-mcp] token check failed (${String(err)}); starting anyway.`);
+    return fallback;
+  }
   if (!res.ok) {
-    // A pinned space id is no substitute: a 401 here means the token can
-    // reach NO workspace at all, so every tool call would fail anyway.
     console.error(
       `[diagramzu-mcp] token check failed (HTTP ${res.status}). The token may be revoked or expired,` +
-        " or its owner may no longer be a member of any workspace.",
+        " or its owner may no longer be a member of any workspace. Starting anyway; tool calls will report it.",
     );
-    process.exit(1);
+    return fallback;
   }
   const who = (await res.json()) as {
     spaceId?: string;
@@ -54,7 +64,6 @@ async function resolveConfig(): Promise<DiagramzuConfig> {
   const resolved = spaceId || who.spaceId || "";
   if (!resolved) {
     console.error("[diagramzu-mcp] the API did not return a default workspace for this token.");
-    process.exit(1);
   }
   const pinnedElsewhere = resolved !== who.spaceId;
   return {
