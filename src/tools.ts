@@ -72,6 +72,18 @@ async function scoped(
   if (typeof raw !== "string") {
     throw new Error("`space` must be a string: a workspace id, slug, or exact name.");
   }
+  // FOLD 1, S5 — an agent that passes `space` on EVERY call (the behaviour
+  // SERVER_INSTRUCTIONS step 6 asks for when several workspaces are reachable)
+  // paid for a /api/token/spaces round trip per tool call even when it named
+  // the workspace we are already pointed at. Short-circuit that.
+  //
+  // THE ID ONLY, never the slug or the name. An id is unique by construction;
+  // a NAME is not — two workspaces may both be called "Design", and skipping
+  // the listing would resolve the ambiguous one silently instead of refusing
+  // it, which is the single failure this resolver exists to prevent. The slug
+  // is unique too, but the client is not told its own slug by whoami, so
+  // there is nothing here to compare against.
+  if (raw === client.spaceId) return client;
   const spaces = await client.listSpaces();
   const res = resolveSpace(raw, spaces);
   if (!res.ok) throw new Error(res.error);
@@ -81,11 +93,16 @@ async function scoped(
 /**
  * Append the acting workspace to a tool result.
  *
+ * FOLD 1, S7 — named `withSpaceFooter`, not `inSpace`. `client.inSpace(space)`
+ * RETURNS A CLIENT pointed at another workspace; this formats a string. Two
+ * things called `inSpace` in one file, one of them changing where a write
+ * lands, is a confusion worth a longer name.
+ *
  * Every result says where it happened, because with an account-scoped token
  * the answer is no longer a constant the agent can assume — and "Created: …"
  * with no workspace named is how a diagram ends up somewhere nobody looks.
  */
-function inSpace(text: string, c: DiagramzuClient): string {
+function withSpaceFooter(text: string, c: DiagramzuClient): string {
   return `${text}\n\n(in space ${c.spaceLabel})`;
 }
 
@@ -250,7 +267,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const lines = diagrams.map((d) => `${d.id}  ${d.title}  (updated ${d.updatedAt})`);
       return {
         content: [
-          { type: "text", text: inSpace(lines.length ? lines.join("\n") : "(no diagrams yet)", c) },
+          { type: "text", text: withSpaceFooter(lines.length ? lines.join("\n") : "(no diagrams yet)", c) },
         ],
       };
     },
@@ -270,7 +287,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const c = await scoped(client, args);
       const { folders } = await c.listFolders();
       if (folders.length === 0) {
-        return { content: [{ type: "text", text: inSpace("(no folders yet)", c) }] };
+        return { content: [{ type: "text", text: withSpaceFooter("(no folders yet)", c) }] };
       }
       const byId = new Map(folders.map((f) => [f.id, f]));
       const lines = folders.map((f) => {
@@ -278,7 +295,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         const parent = byId.get(f.parentId);
         return parent ? `${f.id}  ${parent.name}/${f.name}` : `${f.id}  ${f.name}`;
       });
-      return { content: [{ type: "text", text: inSpace(lines.join("\n"), c) }] };
+      return { content: [{ type: "text", text: withSpaceFooter(lines.join("\n"), c) }] };
     },
   );
 
@@ -320,7 +337,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const footer = `---\nOpen (space members only): ${url}\n${shareLine}`;
       sections.push(diagram.code, footer);
       return {
-        content: [{ type: "text", text: inSpace(sections.join("\n\n"), c) }],
+        content: [{ type: "text", text: withSpaceFooter(sections.join("\n\n"), c) }],
       };
     },
   );
@@ -405,7 +422,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         created = await c.create(body);
       } catch (e) {
         const refusal = createRefusal(e, `${c.siteBaseUrl}/app/settings/plan`);
-        if (refusal) return { content: [{ type: "text", text: inSpace(refusal, c) }] };
+        if (refusal) return { content: [{ type: "text", text: withSpaceFooter(refusal, c) }] };
         throw e;
       }
       const { diagram, warnings } = created;
@@ -424,7 +441,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         lines.push("", "Warnings:", ...warnings.map((w) => `- ${w}`));
       }
       return {
-        content: [{ type: "text", text: inSpace(lines.join("\n"), c) }],
+        content: [{ type: "text", text: withSpaceFooter(lines.join("\n"), c) }],
       };
     },
   );
@@ -541,7 +558,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         return {
           content: [{
             type: "text",
-            text: inSpace(
+            text: withSpaceFooter(
               "Change proposed — NOT applied yet. This workspace requires human " +
               "approval before an agent's diagram changes go live. A reviewer must " +
               "approve it here:\n" +
@@ -564,7 +581,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (res.warnings && res.warnings.length) {
         lines.push("", "Warnings:", ...res.warnings.map((w) => `- ${w}`));
       }
-      return { content: [{ type: "text", text: inSpace(lines.join("\n"), c) }] };
+      return { content: [{ type: "text", text: withSpaceFooter(lines.join("\n"), c) }] };
     },
   );
 
@@ -594,7 +611,11 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       if (!id) throw new Error("id is required");
       const opts = typeof args.postAsComments === "boolean" ? { postAsComments: args.postAsComments } : undefined;
       const { text } = await c.analyze(id, opts);
-      return { content: [{ type: "text", text }] };
+      // FOLD 1, S3: this was the ONE return of nineteen that the footer sweep
+      // missed, while SERVER_INSTRUCTIONS step 6 tells the agent every result
+      // carries it. mcpSpaceFooter.test.ts now walks EVERY space-scoped tool
+      // through registerTools and requires it, so the next tool cannot.
+      return { content: [{ type: "text", text: withSpaceFooter(text, c) }] };
     },
   );
 
@@ -629,7 +650,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       });
       const summary = `${items.length} of ${total} version${total === 1 ? "" : "s"}`;
       return {
-        content: [{ type: "text", text: inSpace([summary, ...lines].join("\n"), c) }],
+        content: [{ type: "text", text: withSpaceFooter([summary, ...lines].join("\n"), c) }],
       };
     },
   );
@@ -659,7 +680,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         (version.label ? ` (${version.label})` : "") +
         `\n_Created ${version.createdAt} by ${version.createdBy}_`;
       return {
-        content: [{ type: "text", text: inSpace(`${header}\n\n${version.code}`, c) }],
+        content: [{ type: "text", text: withSpaceFooter(`${header}\n\n${version.code}`, c) }],
       };
     },
   );
@@ -699,7 +720,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         return `${c.id}${kind}${flag}  ${c.authorName ?? c.authorId}: ${snippet}`;
       });
       const summary = `${items.length} of ${total} comment${total === 1 ? "" : "s"}`;
-      return { content: [{ type: "text", text: inSpace([summary, ...lines].join("\n"), c) }] };
+      return { content: [{ type: "text", text: withSpaceFooter([summary, ...lines].join("\n"), c) }] };
     },
   );
 
@@ -732,7 +753,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       return {
         content: [{
           type: "text",
-          text: inSpace(`Added: ${comment.id}\nOpen (space members only): ${c.diagramUrl(diagramId)}`, c),
+          text: withSpaceFooter(`Added: ${comment.id}\nOpen (space members only): ${c.diagramUrl(diagramId)}`, c),
         }],
       };
     },
@@ -749,12 +770,12 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       const c = await scoped(client, args);
       const { decks } = await c.listDecks();
       if (decks.length === 0) {
-        return { content: [{ type: "text", text: inSpace("(no decks yet)", c) }] };
+        return { content: [{ type: "text", text: withSpaceFooter("(no decks yet)", c) }] };
       }
       const lines = decks.map(
         (d) => `${d.id}  ${d.title}  (${d.slideCount} slide${d.slideCount === 1 ? "" : "s"})`,
       );
-      return { content: [{ type: "text", text: inSpace(lines.join("\n"), c) }] };
+      return { content: [{ type: "text", text: withSpaceFooter(lines.join("\n"), c) }] };
     },
   );
 
@@ -784,7 +805,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         slideLines,
         `---\nPresent (space members only): ${c.deckUrl(deck.id)}\nTo share outside the Space, open the deck and use its Share button to mint a public link.`,
       );
-      return { content: [{ type: "text", text: inSpace(sections.join("\n\n"), c) }] };
+      return { content: [{ type: "text", text: withSpaceFooter(sections.join("\n\n"), c) }] };
     },
   );
 
@@ -821,7 +842,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       }
       const { deck } = await c.createDeck(body);
       return {
-        content: [{ type: "text", text: inSpace([
+        content: [{ type: "text", text: withSpaceFooter([
           `Created deck: ${deck.id}`,
           // LABEL the URL in the OUTPUT, not only in the description. The
           // description is read once when the tool list loads; this line is what
@@ -871,7 +892,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       }
       const { deck } = await c.updateDeck(id, body);
       return {
-        content: [{ type: "text", text: inSpace([
+        content: [{ type: "text", text: withSpaceFooter([
           `Updated deck: ${deck.id}`,
           `Present (space members only): ${c.deckUrl(deck.id)}`,
         ].join("\n"), c) }],

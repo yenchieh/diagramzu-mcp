@@ -32,10 +32,17 @@ export type SpaceResolution =
   | { ok: true; space: TokenSpace }
   | { ok: false; error: string };
 
-/** Normalises a name for comparison: trimmed, case-folded. */
+/** Normalises a name for comparison: trimmed, lower-cased. */
 function foldName(s: string): string {
-  // toLowerCase then toUpperCase: a single fold is not symmetric for every
-  // script, and we only need the two sides to agree with each other.
+  // FOLD 1, S7 — THE COMMENT WAS WRONG, not the code. It claimed a
+  // lower-then-upper double fold; the code lower-cases once, which is what it
+  // should do. Both sides of every comparison go through this function, so
+  // they agree with each other by construction, and the scripts this product
+  // ships in (Latin, Han, Kana) have no case at all or fold cleanly one way.
+  //
+  // A comment describing an algorithm the code does not run is worse than no
+  // comment: the next person either "restores" the missing fold or trusts a
+  // guarantee that was never there.
   return s.trim().toLowerCase();
 }
 
