@@ -47,7 +47,11 @@ async function scoped(
   client: DiagramzuClient,
   args: Record<string, unknown>,
 ): Promise<DiagramzuClient> {
-  const raw = args.space;
+  // Trimmed BEFORE the omitted check so "" and "   " read the same way. The
+  // untrimmed version sent whitespace to the resolver, which paid for a
+  // /api/token/spaces call to produce an error — same verdict, one wasted
+  // round trip, and two spellings of "nothing".
+  const raw = typeof args.space === "string" ? args.space.trim() : args.space;
   if (raw === undefined || raw === null || raw === "") {
     // THE D3 CELL: an account-scoped token whose DEFAULT workspace it has
     // lost, while others are still reachable. go-api deliberately keeps
