@@ -2,7 +2,36 @@ export interface DiagramzuConfig {
   /** Base URL for the REST API (e.g. the Go API host / in-cluster service). */
   baseUrl: string;
   token: string;
+  /**
+   * The Space every call in THIS client acts in. For the per-request client
+   * built from `whoami` it is the token's DEFAULT Space; `inSpace()` returns a
+   * sibling pointed at another one (card 160).
+   */
   spaceId: string;
+  /**
+   * Display name of `spaceId`, so a tool result can say which Space it acted
+   * in without a second API call. `whoami` returns it for the default Space,
+   * and `listSpaces()` for every other.
+   *
+   * ABSENT IS MEANINGFUL, and it is not merely "unknown": whoami omits the
+   * name exactly when the token's default Space is no longer REACHABLE (the
+   * creator was removed from it, or it was deleted) while other Spaces still
+   * are. Callers print the id, or — for the omitted-`space` case — the
+   * "pass space explicitly" message.
+   */
+  spaceName?: string;
+  /**
+   * The token's scope as go-api reports it. "account" means a `space`
+   * argument may name any Space the creator is a live member of; "space"
+   * means only the default one exists for this token.
+   */
+  scope?: "space" | "account";
+  /**
+   * False when the token's default Space is no longer reachable. The token is
+   * still usable — in its OTHER Spaces — so the tools must not fail the whole
+   * request; they refuse only the calls that omit `space`.
+   */
+  defaultReachable?: boolean;
   /**
    * Base URL used ONLY for the user-facing links in tool output
    * (diagramUrl / deckUrl / share URL / upgrade link), e.g.
@@ -102,12 +131,84 @@ export type ActiveShareLookup =
   | { state: "none" }
   | { state: "unknown" };
 
+/** One Space a token may act in, as GET /api/token/spaces reports it. */
+export interface TokenSpace {
+  id: string;
+  slug: string;
+  name: string;
+  role: string;
+  isDefault: boolean;
+}
+
 export class DiagramzuClient {
   constructor(private readonly cfg: DiagramzuConfig) {}
 
   /** REST API base URL. Used for the underlying `fetch` calls. */
   get baseUrl(): string {
     return this.cfg.baseUrl;
+  }
+
+  /** The Space id every call on this client acts in. */
+  get spaceId(): string {
+    return this.cfg.spaceId;
+  }
+
+  /**
+   * How to NAME this client's Space in a tool result: its display name when we
+   * have one, else the id. Never empty, because "in space " with nothing after
+   * it is worse than an id.
+   */
+  get spaceLabel(): string {
+    return this.cfg.spaceName ?? this.cfg.spaceId;
+  }
+
+  /** The token's scope; "space" when go-api did not say (an older API). */
+  get scope(): "space" | "account" {
+    return this.cfg.scope ?? "space";
+  }
+
+  /**
+   * Whether the DEFAULT Space is usable. Only false for an account-scoped
+   * token whose default Space it has lost — in which case a call that omits
+   * `space` cannot be served and must say so.
+   */
+  get defaultReachable(): boolean {
+    return this.cfg.defaultReachable ?? true;
+  }
+
+  /**
+   * A sibling client pointed at a different Space, same token and same hosts.
+   *
+   * This is how the per-call `space` argument works, and it is ONE place
+   * rather than a `space` parameter threaded through 20 request methods: every
+   * path is built from `this.cfg.spaceId`, so re-pointing the config re-points
+   * all of them at once and a method added later is covered by construction.
+   */
+  inSpace(space: { id: string; name?: string }): DiagramzuClient {
+    return new DiagramzuClient({
+      ...this.cfg,
+      spaceId: space.id,
+      ...(space.name === undefined ? {} : { spaceName: space.name }),
+      // The sibling's Space was resolved from a live listing, so it IS
+      // reachable — whatever the DEFAULT Space's state is.
+      defaultReachable: true,
+    });
+  }
+
+  /**
+   * Every Space this token may act in (card 160).
+   *
+   * NEVER CACHED ACROSS REQUESTS, and that is a correctness property rather
+   * than a performance choice: membership is live, so a cached list keeps
+   * offering a Space the holder was removed from. go-api would refuse the
+   * call with a 401, but the agent would have been told the Space is there —
+   * and a tool that lists a Space it cannot use is worse than one that does
+   * not list it. mcp-svc builds a fresh client per request, so the natural
+   * lifetime of this value is one MCP request; nothing here extends it.
+   */
+  async listSpaces(): Promise<TokenSpace[]> {
+    const { spaces } = await this.req<{ spaces: TokenSpace[] }>("/api/token/spaces");
+    return spaces;
   }
 
   /**
@@ -302,8 +403,17 @@ export class DiagramzuClient {
     return this.req(`/api/spaces/${this.cfg.spaceId}/folders`);
   }
 
+  /**
+   * The diagram's URL in the app, carrying the Space it lives in.
+   *
+   * `?space=` is load-bearing for an account-scoped token (card 160): the link
+   * is pasted to a human whose ACTIVE Space in the browser is very likely a
+   * different one, and without the parameter that page renders "not found".
+   * The web switches Space when the visitor is a member and strips the
+   * parameter afterwards.
+   */
   diagramUrl(id: string): string {
-    return `${this.siteBaseUrl}/app/d/${id}`;
+    return `${this.siteBaseUrl}/app/d/${id}?space=${encodeURIComponent(this.cfg.spaceId)}`;
   }
 
   listDecks(): Promise<{ decks: DeckSummary[] }> {
@@ -344,6 +454,6 @@ export class DiagramzuClient {
    * needs its own tool and its own consent story, not a wording change.
    */
   deckUrl(id: string): string {
-    return `${this.siteBaseUrl}/app/present/${id}`;
+    return `${this.siteBaseUrl}/app/present/${id}?space=${encodeURIComponent(this.cfg.spaceId)}`;
   }
 }

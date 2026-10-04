@@ -12,6 +12,7 @@ export const SERVER_INSTRUCTIONS = `Diagramzu stores diagrams that humans read a
 3. After creating/updating, give the user the returned URL and say who can open it. The \`Open (space members only)\` URL opens for members of their Space only. A \`Share (public, read-only)\` line, when one is present, IS the public link — pass that one on to anyone outside the Space. When no Share line is present, a public link is minted by a person, from the diagram's or deck's Share button in DiagramZu.
 4. When substantially rewriting an existing diagram's code, pass createVersion: true (optionally with versionLabel) so the prior state is snapshotted first.
 5. Match the user's language — title, description, and node labels should use the language they wrote in.
+6. If this connection can reach more than one workspace, call list_spaces first and pass the right workspace as \`space\` on every tool — omitting it acts in the default workspace, which may not be the one the user means. Every tool result ends with the workspace it acted in; check it before telling the user where their diagram is.
 
 Pick the diagram type that fits the data:
 - process steps / decisions → flowchart

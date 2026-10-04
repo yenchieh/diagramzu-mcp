@@ -16,6 +16,9 @@ export type {
   DeckDetail,
   CreateDeckInput,
   UpdateDeckInput,
+  TokenSpace,
 } from "./client.js";
 export { registerTools } from "./tools.js";
 export { SERVER_INSTRUCTIONS } from "./instructions.js";
+export { resolveSpace, describeSpaces } from "./spaceResolver.js";
+export type { SpaceResolution } from "./spaceResolver.js";

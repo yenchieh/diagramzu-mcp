@@ -54,15 +54,27 @@ with environment:
 ```
 DIAGRAMZU_BASE_URL=https://diagramzu.ai
 DIAGRAMZU_API_TOKEN=dz_live_xxx
-DIAGRAMZU_SPACE_ID=<your space id>
+DIAGRAMZU_SPACE_ID=<your space id>   # optional
 ```
 
+`DIAGRAMZU_SPACE_ID` is **optional**. Left unset, the server uses the token's own default workspace — the one chosen when the token was minted. Set it to pin a different workspace as the default for this process.
+
 Most users should prefer the remote HTTP transport above — the stdio path exists for clients without HTTP MCP support.
+
+## Workspaces
+
+A token is scoped either to **one workspace** or to **all the workspaces its owner belongs to**, chosen when the token is authorized (the consent page's *Access* radio, or Settings → API tokens). An account-scoped token follows its owner's **live** memberships: joining a workspace adds it, being removed from one closes it on the next call.
+
+- `list_spaces` shows every workspace this connection can act in, which one is the default, and your role in each.
+- Every other tool takes an optional **`space`** — a workspace id, slug, or exact name (case-insensitive). Omit it to act in the default workspace. A name matching more than one workspace is refused rather than guessed; pass the id or slug.
+- Every tool result ends with the workspace it acted in.
+- Returned `/app/...` links carry `?space=`, so opening one switches the browser to that workspace when you are a member.
 
 ## Tools
 
 | Tool | Description |
 |---|---|
+| `list_spaces` | List every workspace this connection can act in, with ids, slugs, roles, and which is the default |
 | `list_diagrams` | List diagrams in the Space (filter with `q`, sort by `updated` / `created`) |
 | `list_folders` | List folders in the Space |
 | `get_diagram` | Fetch one diagram by id (title, description, Mermaid source) |
@@ -119,7 +131,7 @@ cd packages/mcp-diagramzu
 pnpm install
 pnpm run build
 # point your client at: node dist/index.js
-# with DIAGRAMZU_BASE_URL / DIAGRAMZU_API_TOKEN / DIAGRAMZU_SPACE_ID
+# with DIAGRAMZU_BASE_URL / DIAGRAMZU_API_TOKEN (DIAGRAMZU_SPACE_ID optional)
 ```
 
 ## License
