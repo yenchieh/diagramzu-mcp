@@ -38,6 +38,7 @@ export interface PageEdit {
 export type EditResult =
   | { ok: true; text: string }
   | { ok: false; index: number; reason: "empty" }
+  | { ok: false; index: number; reason: "noop" }
   | { ok: false; index: number; reason: "count"; count: number };
 
 export type SectionResult =
@@ -125,7 +126,14 @@ export function pageOutline(body: string): PageHeading[] {
   const skippedLines = start === 0 ? 0 : normalised.slice(0, start).split("\n").length - 1;
 
   const out: PageHeading[] = [];
-  const used = new Map<string, number>();
+  // FOLD 1, S3 — `taken` is the set of anchors ALREADY EMITTED, and the
+  // candidate is tested against it rather than against a per-base counter.
+  // With a counter, headings `foo`, `foo`, `foo-1` produced `foo`, `foo-1`,
+  // `foo-1` — a duplicate, which breaks the uniqueness this type promises and
+  // makes `section` unable to address the second one. GitHub's slugger does the
+  // same walk, and gives `foo`, `foo-1`, `foo-1-1`.
+  const nextIndex = new Map<string, number>();
+  const taken = new Set<string>();
   // Fences are tracked by their opener's CHARACTER and LENGTH: a ``` block
   // closes on ``` or longer, never on ~~~ (go's firstATXH1, verbatim).
   let fenceChar = "";
@@ -150,14 +158,15 @@ export function pageOutline(body: string): PageHeading[] {
     const text = m[2]!.replace(ATX_CLOSING_RE, "").trim();
     if (text === "") return;
     const base = slugify(text);
-    const seen = used.get(base) ?? 0;
-    used.set(base, seen + 1);
-    out.push({
-      level: m[1]!.length,
-      text,
-      anchor: seen === 0 ? base : `${base}-${seen}`,
-      line: skippedLines + i,
-    });
+    let n = nextIndex.get(base) ?? 0;
+    let anchor = n === 0 ? base : `${base}-${n}`;
+    while (taken.has(anchor)) {
+      n++;
+      anchor = `${base}-${n}`;
+    }
+    nextIndex.set(base, n + 1);
+    taken.add(anchor);
+    out.push({ level: m[1]!.length, text, anchor, line: skippedLines + i });
   });
   return out;
 }
@@ -231,6 +240,14 @@ export function applyPageEdits(body: string, edits: PageEdit[]): EditResult {
     const oldText = normalizePageText(edits[i]!.oldText);
     const newText = normalizePageText(edits[i]!.newText);
     if (oldText === "") return { ok: false, index: i, reason: "empty" };
+    // FOLD 1, R3a — an edit whose newText EQUALS its oldText changes nothing,
+    // but the PATCH it produced still bumped the page's revision, moved
+    // `updated_by` to the agent and could trigger an auto snapshot. "I changed
+    // nothing" and "I wrote a new revision that is identical" are different
+    // facts, and the second one invalidates every baseRevision a human editor
+    // is holding. Compared AFTER normalisation, so a CRLF-vs-LF pair is still a
+    // no-op.
+    if (oldText === newText) return { ok: false, index: i, reason: "noop" };
     const count = countOccurrences(text, oldText);
     if (count !== 1) return { ok: false, index: i, reason: "count", count };
     const at = text.indexOf(oldText);

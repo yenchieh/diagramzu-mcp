@@ -297,10 +297,13 @@ function explainPageFailure(err: unknown): PageFailure {
     };
   }
   if (err.status === 429) {
+    // FOLD 1 — NEUTRAL wording. This mapper serves the reads as well, and the
+    // write-specific "so nothing was written" on a rate-limited get_page told
+    // an agent its READ had failed to write something.
     return {
       refusal:
-        "This workspace is writing pages faster than allowed (a brief rate limit), so nothing was " +
-        "written. Wait a few seconds and try again.",
+        "DiagramZu is rate-limiting page requests from this workspace for a moment, so this call " +
+        "did nothing — nothing was read, and nothing was changed. Wait a few seconds and try again.",
     };
   }
   if (err.status === 409 && token === "revision_conflict") {
@@ -319,7 +322,12 @@ function explainPageFailure(err: unknown): PageFailure {
         "Call get_page and pass the revision it reports as `baseRevision`.",
     };
   }
-  if (err.status === 400 && /\blang\b/.test(err.body)) {
+  // FOLD 1, R4g — matched on go-api's exact token, not on the word appearing
+  // anywhere in a 400. `decodePageWriteBody` answers literally "invalid lang"
+  // (card 162); a different 400 that merely MENTIONS the field — an unknown-field
+  // rejection, say — used to be explained as a malformed tag, which sends the
+  // agent to fix something that is not wrong.
+  if (err.status === 400 && /invalid lang/i.test(err.body)) {
     return {
       error:
         "`lang` must be a short language tag made of letters and hyphens — en, ja, zh-TW, pt-BR. " +
@@ -342,15 +350,37 @@ function explainPageFailure(err: unknown): PageFailure {
 async function pageResult(
   c: DiagramzuClient,
   run: () => Promise<string>,
+  /**
+   * FOLD 1, S1 — what a failure must ALSO say, decided when the failure
+   * happens rather than up front.
+   *
+   * `update_page`'s `createVersion` takes a named snapshot BEFORE the write it
+   * protects, so a refusal after that point is not "nothing happened": a row
+   * was written and it spent one of the page's fifty named versions. Every
+   * refusal said "nothing was written" regardless, so an agent reading it
+   * would retry the identical call and burn another. The note comes from a
+   * callback because only the handler knows whether the POST actually went out.
+   */
+  footnote?: () => string | null,
 ): Promise<{ content: { type: "text"; text: string }[] }> {
+  const annotate = (msg: string): string => {
+    const extra = footnote?.();
+    return extra ? `${msg}\n\n${extra}` : msg;
+  };
   try {
     return { content: [{ type: "text", text: withSpaceFooter(await run(), c) }] };
   } catch (e) {
     const explained = explainPageFailure(e);
     if (explained && "refusal" in explained) {
-      return { content: [{ type: "text", text: withSpaceFooter(explained.refusal, c) }] };
+      return { content: [{ type: "text", text: withSpaceFooter(annotate(explained.refusal), c) }] };
     }
-    if (explained && "error" in explained) throw new Error(explained.error);
+    if (explained && "error" in explained) throw new Error(annotate(explained.error));
+    // A validation error the handler raised itself — an unmatched edit, a bad
+    // argument — is rethrown with its own wording, but it still has to carry
+    // the snapshot note: the RETRY refusal is precisely the path that leaves a
+    // snapshot behind.
+    const extra = footnote?.();
+    if (extra && e instanceof Error) throw new Error(annotate(e.message));
     throw e;
   }
 }
@@ -405,6 +435,17 @@ function applyEditsOrRefuse(body: string, edits: PageEdit[], where: "first" | "r
         "(including its surrounding lines if it is not unique), and try again.";
   if (res.reason === "empty") {
     throw new Error(`edits[${res.index}] has an empty \`oldText\`, which would match anywhere. ${tail}`);
+  }
+  if (res.reason === "noop") {
+    // FOLD 1, R3a. REFUSED, not skipped: skipping it would let the other edits
+    // through while the agent believed all of them applied, which is the quiet
+    // half-write this mode exists to prevent.
+    throw new Error(
+      `edits[${res.index}]'s \`newText\` is identical to its \`oldText\`, so it changes nothing — ` +
+        `but sending it would still write a new revision, move the page's last editor to you, and ` +
+        `invalidate the baseRevision anybody else is holding. Drop that edit, or fix its newText. ` +
+        `Nothing was written.`,
+    );
   }
   throw new Error(
     `edits[${res.index}]'s \`oldText\` matched ${res.count} times in the page; it must match ` +
@@ -1236,7 +1277,21 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           params.sort = args.sort;
         }
         const { pages } = await c.listPages(params);
-        if (!pages || pages.length === 0) return "(no pages yet)";
+        if (!pages || pages.length === 0) {
+          // FOLD 1, S2 — "(no pages yet)" under a FILTER told an agent the
+          // workspace was empty when it had only failed to match. The next
+          // move is opposite in the two cases: widen the search, or write the
+          // first page. `all=true` is what the client sends when no folder is
+          // named, so an unfiltered empty really is an empty workspace.
+          const why: string[] = [];
+          if (params.q !== undefined) why.push(`q "${params.q}"`);
+          if (params.folderId !== undefined) why.push("that folder");
+          if (params.owner !== undefined) why.push(`owner "${params.owner}"`);
+          return why.length
+            ? `No pages match ${why.join(" and ")}. (The workspace may still have pages — ` +
+              `this is a filtered search, so widen or drop the filter before concluding it is empty.)`
+            : "(no pages yet)";
+        }
         const lines = pages.flatMap((p) => {
           const agent = agentTokenName(p.updatedActor);
           const head =
@@ -1438,8 +1493,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       description:
         "Update a Markdown page. EXACTLY ONE body mode, and `edits` is the one to reach for: each " +
         "edit replaces an `oldText` that must appear exactly once in the page, so a change to one " +
-        "paragraph never sends — or silently reverts — the rest of the document, and a concurrent " +
-        "edit by somebody else is re-applied to their new text instead of overwriting it. The other " +
+        "paragraph never sends — or silently reverts — the rest of the document. If somebody else " +
+        "edits the page first, YOUR edits are re-applied on top of THEIR text, and the call is " +
+        "refused outright if they changed the very span you are editing. The other " +
         "mode is `baseRevision` plus `body`, which replaces the whole document and needs the " +
         "revision get_page reported. Changing only metadata (title, folderId, lang) needs neither. " +
         "Returns the page's new revision and its URL in the app, which only members of this " +
@@ -1506,13 +1562,33 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
     },
     async (args) => {
       const c = await scoped(client, args);
+      // Declared in the HANDLER's scope, not inside run(): the S1 footnote
+      // below is a sibling of run(), and it has to be able to see whether the
+      // snapshot POST actually went out.
+      let snapshotId: string | undefined;
       return pageResult(c, async () => {
         const id = String(args.id ?? "");
         if (!id) throw new Error("id is required");
 
         const hasBody = typeof args.body === "string";
         const hasEdits = args.edits !== undefined && args.edits !== null;
-        const hasBase = typeof args.baseRevision === "number";
+
+        // FOLD 1, R2b — a `baseRevision` an agent stringified ("3") used to
+        // fall through `typeof === "number"` and be reported as MISSING, which
+        // sends it looking for the wrong bug. A whole-number string is
+        // accepted; anything else that is present says what it must be.
+        const baseRevisionGiven = args.baseRevision !== undefined && args.baseRevision !== null;
+        let baseRevision: number | undefined;
+        if (typeof args.baseRevision === "number") {
+          baseRevision = args.baseRevision;
+        } else if (typeof args.baseRevision === "string" && /^\d+$/.test(args.baseRevision.trim())) {
+          baseRevision = Number(args.baseRevision.trim());
+        } else if (baseRevisionGiven) {
+          throw new Error(
+            "`baseRevision` must be a number — the revision get_page reported, e.g. 3. Nothing was written.",
+          );
+        }
+        const hasBase = baseRevision !== undefined;
 
         // THE MODE RULE, enforced here rather than in the schema: `buildServer`
         // hands `inputSchema` to the client untouched and never validates
@@ -1552,10 +1628,36 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           );
         }
 
+        // FOLD 1, R2a — `baseRevision` with NEITHER body mode was accepted and
+        // then dropped on the floor, so a metadata-only PATCH looked to the
+        // agent like a guarded write and was not one: go-api neither checks nor
+        // bumps `revision` for a title, folder or lang change (card 162). An
+        // agent that believed otherwise would think it had been protected from
+        // a concurrent edit it was never protected from.
+        if (hasBase && !hasBody && !hasEdits) {
+          throw new Error(
+            "`baseRevision` only applies to a BODY write, and this call changes only metadata. " +
+              "A title, folder or lang change never checks or bumps the page's revision, so there " +
+              "is nothing for it to guard — drop it, or pass `body` with it. Nothing was written.",
+          );
+        }
+
         const label = typeof args.versionLabel === "string" ? args.versionLabel : undefined;
         const wantSnapshot = args.createVersion === true;
+
+        // FOLD 1, R2c — a `versionLabel` without `createVersion` was accepted
+        // and silently dropped, so an agent that asked for a LABELLED
+        // checkpoint got no checkpoint at all and was told the write succeeded.
+        // REFUSED rather than implying `createVersion: true`: implying it would
+        // write a snapshot row nobody asked for and spend one of the fifty.
+        if (label !== undefined && !wantSnapshot) {
+          throw new Error(
+            "`versionLabel` labels the snapshot that `createVersion: true` takes, and " +
+              "`createVersion` was not set — so no snapshot would be taken and the label would be " +
+              "dropped. Pass `createVersion: true` as well, or drop the label. Nothing was written.",
+          );
+        }
         const notes: string[] = [];
-        let snapshotId: string | undefined;
 
         // The snapshot is a SEPARATE call that must precede the write, because
         // card 162's PATCH takes no snapshot flags (and decodes with
@@ -1606,8 +1708,8 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
               body = applyEditsOrRefuse(fresh.body, edits, "retry");
               base = fresh.revision;
               notes.push(
-                "Another writer changed the page first, so the edits were re-applied to their new " +
-                  "text — their change is intact.",
+                "Another writer changed the page first, so YOUR edits were re-applied on top of " +
+                  "THEIR text. Their change is intact and yours is in; nothing was overwritten.",
               );
             }
           }
@@ -1615,7 +1717,7 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         } else if (hasBody) {
           await snapshot();
           const res = await c.patchPage(id, {
-            baseRevision: args.baseRevision as number,
+            baseRevision: baseRevision as number,
             body: args.body as string,
             ...meta,
           });
@@ -1640,7 +1742,18 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         if (versionId && versionId !== snapshotId) lines.push(`Snapshot: ${versionId}`);
         lines.push(...pageOpenLines(c, page.id));
         return lines.join("\n");
-      });
+      },
+      // FOLD 1, S1 — every refusal after the snapshot names it. `snapshotId` is
+      // read when the failure is explained, so it is set only if the POST
+      // really landed.
+      () =>
+        snapshotId
+          ? `NOT quite nothing, though: the named snapshot \`${snapshotId}\` you asked for WAS ` +
+            `taken before this attempt and is still there. The page's TEXT is unchanged; what was ` +
+            `spent is one of its fifty named versions. Retry WITHOUT createVersion — you already ` +
+            `have the checkpoint — or delete that snapshot in DiagramZu if you do not want it.`
+          : null,
+      );
     },
   );
 }
