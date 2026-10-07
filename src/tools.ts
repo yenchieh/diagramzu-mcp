@@ -228,6 +228,13 @@ function conflictRevision(err: unknown): number | null {
 const CONFLICT_ADVICE =
   "Call get_page to read the current text and the new revision, then re-apply your change.";
 
+/**
+ * How many times `update_page`'s `edits` mode may PATCH: the first write plus
+ * ONE retry (D1(b)5). Named so the budget is a single token rather than a shape
+ * of control flow, and so a change to it is visible in a diff.
+ */
+const PAGE_EDIT_ATTEMPTS = 2;
+
 function explainPageFailure(err: unknown): PageFailure {
   if (!(err instanceof DiagramzuApiError)) return null;
   const token = err.token;
@@ -1541,43 +1548,42 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         if (hasEdits) {
           const edits = parseEdits(args.edits);
           const got = await c.getPage(id);
-          const firstText = applyEditsOrRefuse(got.page.body, edits, "first");
+          let body = applyEditsOrRefuse(got.page.body, edits, "first");
+          let base = got.page.revision;
           await snapshot();
-          try {
-            const res = await c.patchPage(id, {
-              baseRevision: got.page.revision,
-              body: firstText,
-              ...meta,
-            });
-            page = res.page;
-            versionId = res.versionId;
-          } catch (e) {
-            // D1(b)4 — THE ONE RETRY. It proceeds only if every `oldText` still
-            // matches exactly once in the NEW body; applyEditsOrRefuse("retry")
-            // is what refuses otherwise, and it writes nothing. There is no
-            // second retry (D1(b)5): a loop here is an unbounded write race
-            // nobody can see from the outside.
-            const current = conflictCurrent(e);
-            const isConflict =
-              e instanceof DiagramzuApiError && e.status === 409 && e.token === "revision_conflict";
-            if (!isConflict) throw e;
-            // `current` comes with the 409 (card 162 sends it so a client can
-            // show a diff without a second round trip) and is the exact state
-            // that refused the write — body and revision from one snapshot. A
-            // re-GET is the fallback for an API that did not send it.
-            const fresh = current ?? (await c.getPage(id)).page;
-            const retryText = applyEditsOrRefuse(fresh.body, edits, "retry");
-            const res = await c.patchPage(id, {
-              baseRevision: fresh.revision,
-              body: retryText,
-              ...meta,
-            });
-            page = res.page;
-            versionId = res.versionId;
-            notes.push(
-              "Another writer changed the page first, so the edits were re-applied to their new " +
-                "text — their change is intact.",
-            );
+          // D1(b)4–5 — THE ONE RETRY, written as a BOUNDED loop whose budget is
+          // named once (PAGE_EDIT_ATTEMPTS: the first write plus one retry). The
+          // retry proceeds ONLY if every `oldText` still matches exactly once in
+          // the NEW body — applyEditsOrRefuse("retry") is what refuses
+          // otherwise, and a refusal writes nothing. A second retry is
+          // deliberately unavailable: an unbounded loop here is a write race
+          // nobody outside can see, and the honest answer to a page that keeps
+          // moving is to hand it back to the agent.
+          for (let attempt = 1; ; attempt++) {
+            try {
+              const res = await c.patchPage(id, { baseRevision: base, body, ...meta });
+              page = res.page;
+              versionId = res.versionId;
+              break;
+            } catch (e) {
+              const isConflict =
+                e instanceof DiagramzuApiError &&
+                e.status === 409 &&
+                e.token === "revision_conflict";
+              if (!isConflict || attempt >= PAGE_EDIT_ATTEMPTS) throw e;
+              // The 409's own `current` is the exact state that refused the
+              // write — body and revision out of ONE snapshot, with no window
+              // between reading the text and naming the revision it belongs to.
+              // Card 162 sends it precisely so a client needs no second round
+              // trip; a re-GET is the fallback for an API that did not.
+              const fresh = conflictCurrent(e) ?? (await c.getPage(id)).page;
+              body = applyEditsOrRefuse(fresh.body, edits, "retry");
+              base = fresh.revision;
+              notes.push(
+                "Another writer changed the page first, so the edits were re-applied to their new " +
+                  "text — their change is intact.",
+              );
+            }
           }
           notes.unshift(`Applied ${edits.length} edit${edits.length === 1 ? "" : "s"}.`);
         } else if (hasBody) {
