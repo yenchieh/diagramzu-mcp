@@ -13,6 +13,13 @@ export const SERVER_INSTRUCTIONS = `Diagramzu stores diagrams that humans read a
 4. When substantially rewriting an existing diagram's code, pass createVersion: true (optionally with versionLabel) so the prior state is snapshotted first.
 5. Match the user's language — title, description, and node labels should use the language they wrote in.
 6. If this connection can reach more than one workspace, call list_spaces first and pass the right workspace as \`space\` on every tool — omitting it acts in the default workspace, which may not be the one the user means. Every tool result ends with the workspace it acted in; check it before telling the user where their diagram is.
+7. For a design write-up — the decision, the trade-offs, the rollout, the risks — create a PAGE with create_page and put the prose there; a diagram cannot carry an argument. Any diagram worth keeping is created with create_diagram and embedded in the page by id:
+
+  \`\`\`diagramzu
+  <diagram id>
+  \`\`\`
+
+  so the page always shows the diagram's current state. An inline \`\`\`mermaid block renders too, but it is a throwaway sketch: no id, no history, no comments, and nobody can find it again. To change a page later, prefer update_page's \`edits\` over resending the whole body.
 
 Pick the diagram type that fits the data:
 - process steps / decisions → flowchart

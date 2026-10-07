@@ -140,6 +140,95 @@ export interface TokenSpace {
   isDefault: boolean;
 }
 
+/**
+ * A non-2xx answer from go-api, with the status and the parsed body kept.
+ *
+ * THE MESSAGE IS UNCHANGED, and that is load-bearing (card 164): `createRefusal`
+ * (card 136) and `mcpShareLookupClient.test.ts` both match on the string
+ * `diagramzu API <status>: <body>` that `req` has always thrown, so a new error
+ * TYPE must still read as that sentence or the diagram-cap refusal silently
+ * stops matching. What is new is the structure beside it — card 162's page
+ * routes answer with stable tokens (`revision_conflict` + `current`,
+ * `page_storage_limit` + `limit`/`used`), and the `edits` retry has to read
+ * `current.body` and `current.revision` rather than regex a sentence.
+ */
+export class DiagramzuApiError extends Error {
+  readonly status: number;
+  /** The raw response body. */
+  readonly body: string;
+  /** The body parsed as JSON, or undefined when it was not JSON. */
+  readonly payload: Record<string, unknown> | undefined;
+
+  constructor(status: number, body: string, statusText: string) {
+    super(`diagramzu API ${status}: ${body || statusText}`);
+    this.name = "DiagramzuApiError";
+    this.status = status;
+    this.body = body;
+    let parsed: Record<string, unknown> | undefined;
+    try {
+      const v: unknown = JSON.parse(body);
+      if (v && typeof v === "object" && !Array.isArray(v)) parsed = v as Record<string, unknown>;
+    } catch {
+      parsed = undefined;
+    }
+    this.payload = parsed;
+  }
+
+  /** go-api's stable error token (`pages_disabled`, `page_limit`, …), when it sent one. */
+  get token(): string | undefined {
+    const t = this.payload?.error;
+    return typeof t === "string" ? t : undefined;
+  }
+}
+
+/** One row of GET /api/spaces/{id}/pages — a SNIPPET, never a body. */
+export interface PageSummary {
+  id: string;
+  title: string;
+  folderId: string | null;
+  lang: string;
+  revision: number;
+  snippet: string;
+  updatedAt: string;
+  updatedBy: string;
+  createdAt: string;
+  createdBy: string;
+  createdActor?: Actor;
+  updatedActor?: Actor;
+}
+
+/** GET /api/spaces/{id}/pages/{pageId} — the whole row. */
+export interface Page {
+  id: string;
+  spaceId: string;
+  folderId: string | null;
+  title: string;
+  body: string;
+  lang: string;
+  /**
+   * The BODY's revision, and only the body's (card 162). A body write is a
+   * compare-and-set on it; a title, folder or lang write neither reads nor
+   * bumps it, so a rename cannot 409 someone's autosave.
+   */
+  revision: number;
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+  createdActor?: Actor;
+  updatedActor?: Actor;
+}
+
+/** One page history entry as the snapshot route reports it. */
+export interface PageVersionRef {
+  id: string;
+  kind: string;
+  label: string | null;
+  title: string;
+  revision: number;
+  createdAt: string;
+}
+
 export class DiagramzuClient {
   constructor(private readonly cfg: DiagramzuConfig) {}
 
@@ -231,7 +320,7 @@ export class DiagramzuClient {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`diagramzu API ${res.status}: ${text || res.statusText}`);
+      throw new DiagramzuApiError(res.status, text, res.statusText);
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
@@ -414,6 +503,101 @@ export class DiagramzuClient {
    */
   diagramUrl(id: string): string {
     return `${this.siteBaseUrl}/app/d/${id}?space=${encodeURIComponent(this.cfg.spaceId)}`;
+  }
+
+  // ── Markdown pages (card 162's routes, card 164's tools) ──────────────────
+
+  /**
+   * List pages. `all=true` unless a folder is named, exactly as `list()` does
+   * for diagrams: without it go-api lists the ROOT folder only
+   * (`folder_id IS NULL`), so an agent whose pages live in folders would be told
+   * the space is empty. The server ignores `folderId` when `all=true`, hence
+   * either/or rather than both.
+   *
+   * There is no limit/offset here because card 162's ListPages has none — it is
+   * a fixed `LIMIT 200`. A paging argument would be a promise the API cannot
+   * keep.
+   */
+  listPages(params?: {
+    q?: string;
+    folderId?: string;
+    owner?: string;
+    sort?: "created" | "updated" | "title" | "relevance";
+  }): Promise<{ pages: PageSummary[] }> {
+    const search = new URLSearchParams();
+    if (params?.folderId) search.set("folderId", params.folderId);
+    else search.set("all", "true");
+    if (params?.q) search.set("q", params.q);
+    if (params?.owner) search.set("owner", params.owner);
+    if (params?.sort) search.set("sort", params.sort);
+    return this.req(`/api/spaces/${this.cfg.spaceId}/pages?${search.toString()}`);
+  }
+
+  getPage(id: string): Promise<{ page: Page }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/pages/${id}`);
+  }
+
+  createPage(body: {
+    body?: string;
+    title?: string;
+    folderId?: string;
+    lang?: string;
+  }): Promise<{ page: Page }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/pages`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * PATCH one page. `versionId` is present only when go-api's OWN auto snapshot
+   * fired (the "the writer changed" rule), which is how a caller tells "history
+   * grew" from "the 10-minute window said no" without listing versions.
+   *
+   * The payload is passed through rather than typed field by field because
+   * go-api decodes it with `DisallowUnknownFields`: the callers in tools.ts
+   * build exactly the keys the route accepts, and an extra one must fail loudly
+   * as a 400 rather than be dropped here.
+   */
+  patchPage(
+    id: string,
+    body: Record<string, unknown>,
+  ): Promise<{ page: Page; versionId?: string }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/pages/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Take an EXPLICIT (named) snapshot of a page's current state.
+   *
+   * This is what `update_page`'s `createVersion` means. Unlike the diagram
+   * PATCH, card 162's page PATCH takes no snapshot flags at all, so the
+   * checkpoint is a separate call that must precede the write it protects.
+   */
+  createPageSnapshot(id: string, label?: string): Promise<{ version: PageVersionRef }> {
+    return this.req(`/api/spaces/${this.cfg.spaceId}/pages/${id}/versions`, {
+      method: "POST",
+      body: JSON.stringify(label === undefined ? {} : { label }),
+    });
+  }
+
+  /**
+   * The page's URL in the app, carrying the Space it lives in.
+   *
+   * Members-only, like `diagramUrl` — `/app/**` is behind the auth guard — and
+   * `?space=` is load-bearing for the same reason (card 160): the link is pasted
+   * to a human whose ACTIVE workspace is very likely a different one, and
+   * without the parameter that page renders "not found".
+   *
+   * There is NO public page link to pair this with: pages have no share route
+   * yet (card 131 slice 5), which is why no page tool prints a
+   * `Share (public, read-only)` line and why none of them mentions a Share
+   * button that does not exist.
+   */
+  pageUrl(id: string): string {
+    return `${this.siteBaseUrl}/app/pages/${id}?space=${encodeURIComponent(this.cfg.spaceId)}`;
   }
 
   listDecks(): Promise<{ decks: DeckSummary[] }> {

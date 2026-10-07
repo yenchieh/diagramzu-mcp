@@ -89,6 +89,10 @@ A token is scoped either to **one workspace** or to **all the workspaces its own
 | `get_deck` | Fetch one deck by id, with its ordered slides |
 | `create_deck` | Assemble existing diagrams into an ordered presentation deck |
 | `update_deck` | Change a deck's title, description, or slide order (`slides` is declarative) |
+| `list_pages` | List the workspace's Markdown pages (id, title, revision, snippet; filter with `q`) |
+| `get_page` | Fetch one page by id — the whole body, or just its outline or one section |
+| `create_page` | Create a Markdown page (title comes from the body's front matter or first heading) |
+| `update_page` | Edit a page: targeted `edits`, or `baseRevision` + a whole new `body` |
 
 ## Which URLs are public
 
@@ -99,6 +103,7 @@ someone outside your Space:
 |---|---|
 | `diagramzu.ai/app/d/<id>` | Space members only — the diagram in the app. |
 | `diagramzu.ai/app/present/<deck id>` | Space members only — the deck's presentation view. |
+| `diagramzu.ai/app/pages/<id>` | Space members only — the Markdown page in the app. |
 | `diagramzu.ai/s/<slug>` | Anyone with the link — the public, read-only diagram page. |
 | `diagramzu.ai/s/p/<slug>` | Anyone with the link — the public, read-only deck. |
 
@@ -111,6 +116,12 @@ but because publishing a Space's content should be a deliberate human action
 rather than a side effect of a conversation. Once a diagram has a public link,
 `get_diagram` and `update_diagram` report it on a `Share (public, read-only):`
 line of their own.
+
+**Pages have no public link at all yet.** There is no `/s/`-style address for a
+Markdown page and no Share button for one, so `get_page`, `create_page` and
+`update_page` print only the members-only `/app/pages/<id>` URL and say so. When
+a public page link ships, it will be minted the same way — by a person, from the
+page in DiagramZu.
 
 ## Show off your setup
 

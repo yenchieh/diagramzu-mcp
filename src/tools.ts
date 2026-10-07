@@ -1,4 +1,6 @@
-import type { Actor, DiagramzuClient } from "./client.js";
+import type { Actor, DiagramzuClient, Page } from "./client.js";
+import { DiagramzuApiError } from "./client.js";
+import { applyPageEdits, pageOutline, pageSection, type PageEdit } from "./pageText.js";
 import { describeSpaces, resolveSpace } from "./spaceResolver.js";
 
 // ── card 160: the per-call `space` argument ──────────────────────────────────
@@ -165,6 +167,230 @@ function createRefusal(err: unknown, upgradeUrl: string): string | null {
     );
   }
   return null;
+}
+
+// ── card 164: the page refusals ───────────────────────────────────────────────
+//
+// Card 162 defined stable error tokens precisely so this mapper exists
+// (pages_write.go: "The MCP error mapper (slice 3) … will MATCH these strings").
+// Each one becomes a sentence an agent can act on, and every one of them says
+// NOTHING WAS WRITTEN — an agent that is unsure whether its write landed either
+// retries (a second write) or tells a human the work is saved when it is not.
+//
+// TWO SHAPES, and the split is a judgement call worth stating:
+//
+//   `refusal` — the WORKSPACE or the DEPLOYMENT said no: a cap, a review
+//   workspace, the kill switch, a rate limit. Returned as TEXT with the
+//   workspace footer, exactly as `createRefusal` does for the diagram cap
+//   (card 136). Retrying differently cannot help; the agent needs a sentence to
+//   relay to a person who can act.
+//
+//   `error` — the CALL was wrong, or the page moved under it: an invalid `lang`,
+//   a stale `baseRevision`, a conflict that survived the one retry. THROWN, so
+//   the client sees a tool error rather than prose it might read as a success.
+//   D1(b)5 asks for exactly that on the second 409.
+//
+// Anything else returns null and the caller rethrows: a mapper that swallows
+// every failure is how a 500 becomes a confident lie.
+type PageFailure = { refusal: string } | { error: string } | null;
+
+/** "268435456" → "256 MiB", for a sentence a human will read. */
+function mib(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MiB`;
+}
+
+function numberFrom(payload: Record<string, unknown> | undefined, key: string): number | null {
+  const v = payload?.[key];
+  return typeof v === "number" ? v : null;
+}
+
+/**
+ * The CURRENT row a 409 carries (card 162's `writeRevisionConflict`), when it
+ * carries one. This is what lets the `edits` retry re-apply against the new
+ * body WITHOUT a second GET: the body and the revision come from the same
+ * snapshot — the very state that refused the write — so there is no window
+ * between reading the text and naming the revision it belongs to.
+ */
+function conflictCurrent(err: unknown): { body: string; revision: number } | null {
+  if (!(err instanceof DiagramzuApiError) || err.status !== 409) return null;
+  const cur = err.payload?.current;
+  if (!cur || typeof cur !== "object") return null;
+  const { body, revision } = cur as { body?: unknown; revision?: unknown };
+  if (typeof body !== "string" || typeof revision !== "number") return null;
+  return { body, revision };
+}
+
+/** The revision a 409 reports as current, for the error sentence. */
+function conflictRevision(err: unknown): number | null {
+  return conflictCurrent(err)?.revision ?? null;
+}
+
+const CONFLICT_ADVICE =
+  "Call get_page to read the current text and the new revision, then re-apply your change.";
+
+function explainPageFailure(err: unknown): PageFailure {
+  if (!(err instanceof DiagramzuApiError)) return null;
+  const token = err.token;
+
+  if (err.status === 503 && token === "pages_disabled") {
+    return {
+      refusal:
+        "Pages are switched off in this DiagramZu deployment right now, so nothing was written. " +
+        "Reading existing pages still works. Ask whoever runs this deployment to turn Pages back on.",
+    };
+  }
+  if (err.status === 402 && token === "page_limit") {
+    const limit = numberFrom(err.payload, "limit");
+    return {
+      refusal:
+        `This workspace has reached its ceiling of ${(limit ?? 10000).toLocaleString("en-US")} pages, ` +
+        "so no page was created. Existing pages are unaffected. Delete pages the team no longer needs, " +
+        "then try again. (Paying does not raise this ceiling — it is the same on every plan.)",
+    };
+  }
+  if (err.status === 402 && token === "page_storage_limit") {
+    const limit = numberFrom(err.payload, "limit");
+    const used = numberFrom(err.payload, "used");
+    return {
+      refusal:
+        `This workspace has used its page storage budget of ${limit === null ? "256 MiB" : mib(limit)}` +
+        `${used === null ? "" : ` (about ${mib(used)} in use)`}, so nothing was written. ` +
+        "The budget counts page bodies AND every stored version of them, so a workspace at the cap " +
+        "cannot be edited at all — not even to make a page shorter — until something is deleted. " +
+        "Deleting a page frees its history too.",
+    };
+  }
+  if (err.status === 403 && token === "page_review_unsupported") {
+    return {
+      refusal:
+        "This workspace reviews agent changes, and a page edit cannot be proposed for review yet, " +
+        "so nothing was written. Create a new page with your draft instead, or ask a workspace " +
+        "member to apply the change.",
+    };
+  }
+  if (err.status === 409 && token === "named_version_limit") {
+    const limit = numberFrom(err.payload, "limit");
+    return {
+      refusal:
+        `This page already has the maximum of ${limit ?? 50} named snapshots, so nothing was written — ` +
+        "the snapshot you asked for could not be taken, and the edit was not applied without it. " +
+        "Delete a snapshot in DiagramZu, or call update_page again without createVersion.",
+    };
+  }
+  if (err.status === 429) {
+    return {
+      refusal:
+        "This workspace is writing pages faster than allowed (a brief rate limit), so nothing was " +
+        "written. Wait a few seconds and try again.",
+    };
+  }
+  if (err.status === 409 && token === "revision_conflict") {
+    const rev = conflictRevision(err);
+    return {
+      error:
+        "Someone else changed this page" +
+        (rev === null ? "" : ` (it is now revision ${rev})`) +
+        `, so nothing was written. ${CONFLICT_ADVICE}`,
+    };
+  }
+  if (err.status === 400 && /base_revision_required/.test(err.body)) {
+    return {
+      error:
+        "A page's body write must say which revision it is based on, so nothing was written. " +
+        "Call get_page and pass the revision it reports as `baseRevision`.",
+    };
+  }
+  if (err.status === 400 && /\blang\b/.test(err.body)) {
+    return {
+      error:
+        "`lang` must be a short language tag made of letters and hyphens — en, ja, zh-TW, pt-BR. " +
+        "Nothing was written.",
+    };
+  }
+  return null;
+}
+
+/**
+ * The ONE wrapper every page tool's body runs inside.
+ *
+ * It does two things that must not be left to four copies: it appends the
+ * workspace footer to EVERY outcome, success and refusal alike (card 160's
+ * promise in SERVER_INSTRUCTIONS step 6, which `analyze_diagram` once broke),
+ * and it applies the refusal/error split above. A validation error the handler
+ * raises itself is not a `DiagramzuApiError`, so it passes straight through
+ * with its own wording.
+ */
+async function pageResult(
+  c: DiagramzuClient,
+  run: () => Promise<string>,
+): Promise<{ content: { type: "text"; text: string }[] }> {
+  try {
+    return { content: [{ type: "text", text: withSpaceFooter(await run(), c) }] };
+  } catch (e) {
+    const explained = explainPageFailure(e);
+    if (explained && "refusal" in explained) {
+      return { content: [{ type: "text", text: withSpaceFooter(explained.refusal, c) }] };
+    }
+    if (explained && "error" in explained) throw new Error(explained.error);
+    throw e;
+  }
+}
+
+/** `Open (space members only): …` — the only URL a page tool prints. */
+function pageOpenLines(c: DiagramzuClient, id: string): string[] {
+  return ["---", `Open (space members only): ${c.pageUrl(id)}`];
+}
+
+/** The one-line attribution a page's last write earns, or nothing. */
+function pageActorLine(page: Pick<Page, "updatedActor">): string | null {
+  const name = agentTokenName(page.updatedActor);
+  return name ? `Last updated by agent token \`${name}\`` : null;
+}
+
+/** The `edits` argument, validated into PageEdits or refused. */
+function parseEdits(raw: unknown): PageEdit[] {
+  if (!Array.isArray(raw)) throw new Error("`edits` must be an array of {oldText, newText}.");
+  if (raw.length === 0) {
+    throw new Error(
+      "`edits` is empty, so there is nothing to apply and nothing was written. Pass at least one " +
+        "{oldText, newText}, or use baseRevision + body to replace the whole page.",
+    );
+  }
+  return raw.map((e, i) => {
+    const edit = e as { oldText?: unknown; newText?: unknown };
+    if (typeof edit?.oldText !== "string" || typeof edit?.newText !== "string") {
+      throw new Error(
+        `edits[${i}] must have string \`oldText\` and \`newText\`. Nothing was written.`,
+      );
+    }
+    return { oldText: edit.oldText, newText: edit.newText };
+  });
+}
+
+/**
+ * Apply the edits or REFUSE, with the index and the count in the message.
+ *
+ * `where` distinguishes the first attempt from the retry, because the remedy
+ * differs: on the first attempt the agent's `oldText` never matched the page it
+ * just read, which is its own mistake to fix; on the RETRY the text matched a
+ * moment ago and another writer has since changed that very span — the one case
+ * where proceeding would destroy somebody else's edit.
+ */
+function applyEditsOrRefuse(body: string, edits: PageEdit[], where: "first" | "retry"): string {
+  const res = applyPageEdits(body, edits);
+  if (res.ok) return res.text;
+  const tail =
+    where === "retry"
+      ? `The page changed under you; nothing was written. ${CONFLICT_ADVICE}`
+      : "Nothing was written. Call get_page, copy the exact text you mean to replace " +
+        "(including its surrounding lines if it is not unique), and try again.";
+  if (res.reason === "empty") {
+    throw new Error(`edits[${res.index}] has an empty \`oldText\`, which would match anywhere. ${tail}`);
+  }
+  throw new Error(
+    `edits[${res.index}]'s \`oldText\` matched ${res.count} times in the page; it must match ` +
+      `exactly once. ${tail}`,
+  );
 }
 
 // ── actor attribution (card 84) ───────────────────────────────────────────────
@@ -920,6 +1146,469 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           `Present (space members only): ${c.deckUrl(deck.id)}`,
         ].join("\n"), c) }],
       };
+    },
+  );
+
+  // ── card 164: Markdown pages ───────────────────────────────────────────────
+  //
+  // A page is where the PROSE of a decision lives — the trade-offs, the
+  // rollout, the risks — with diagrams embedded in it by id. The four tools
+  // below are deliberately shaped so an agent never has to hold a whole
+  // document in context to change one paragraph: `get_page` can return an
+  // outline or a single section, and `update_page`'s `edits` mode sends spans
+  // rather than the document.
+
+  server.registerTool(
+    "list_pages",
+    {
+      description:
+        "List the workspace's Markdown pages, most recently edited first. Returns each page's id, " +
+        "title, revision, last-edit time, who edited it, and a short snippet — never the full body; " +
+        "call get_page for that. Filter with `q`, a case-insensitive substring over title and body " +
+        "that works in Chinese and Japanese too, and pass `sort: 'relevance'` with it so a title hit " +
+        "ranks first. Call this BEFORE create_page to see whether a page on the topic already exists " +
+        "— prefer update_page over writing a second one.",
+      inputSchema: {
+        type: "object",
+        properties: withSpace({
+          q: {
+            type: "string",
+            description:
+              "Case-insensitive substring search over title and body. Works for CJK text; a query of one or two Chinese characters is slower because the trigram index cannot help it.",
+          },
+          folderId: {
+            type: "string",
+            description:
+              "Optional UUID — narrow to pages in this folder. Use list_folders to look up folder ids. Omit to see every folder (the default).",
+          },
+          owner: {
+            type: "string",
+            description:
+              "Filter to pages created by this user id. Rarely needed; omit unless the caller already has the id.",
+          },
+          sort: {
+            type: "string",
+            enum: ["created", "updated", "title", "relevance"],
+            description:
+              "Sort order. 'updated' (the default) = newest edit first; 'created' = newest page first; 'title' = alphabetical; 'relevance' = title hits before body hits, and only meaningful with `q`.",
+          },
+        }),
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const c = await scoped(client, args);
+      return pageResult(c, async () => {
+        const params: {
+          q?: string;
+          folderId?: string;
+          owner?: string;
+          sort?: "created" | "updated" | "title" | "relevance";
+        } = {};
+        if (typeof args.q === "string") params.q = args.q;
+        if (typeof args.folderId === "string") params.folderId = args.folderId;
+        if (typeof args.owner === "string") params.owner = args.owner;
+        if (
+          args.sort === "created" ||
+          args.sort === "updated" ||
+          args.sort === "title" ||
+          args.sort === "relevance"
+        ) {
+          params.sort = args.sort;
+        }
+        const { pages } = await c.listPages(params);
+        if (!pages || pages.length === 0) return "(no pages yet)";
+        const lines = pages.flatMap((p) => {
+          const agent = agentTokenName(p.updatedActor);
+          const head =
+            `${p.id}  ${p.title}  (rev ${p.revision}, updated ${p.updatedAt})` +
+            (agent ? `  (agent: ${agent})` : "");
+          const snippet = p.snippet ? p.snippet.replace(/\s+/g, " ").trim() : "";
+          return snippet ? [head, `    ${snippet}`] : [head];
+        });
+        const summary = `${pages.length} page${pages.length === 1 ? "" : "s"}`;
+        return [summary, ...lines].join("\n");
+      });
+    },
+  );
+
+  server.registerTool(
+    "get_page",
+    {
+      description:
+        "Fetch one Markdown page by id. Returns its body, its `revision` — pass that as " +
+        "`baseRevision` when replacing the whole body — its language, who edited it last, and its " +
+        "URL in the app, which only members of this workspace can open. Pages have no public link " +
+        "yet, so there is no shareable address to hand out. For a long document prefer " +
+        "`outline: true` (the heading tree, with an anchor per heading) and then " +
+        "`section: '<heading text or anchor>'` for just the part you need.",
+      inputSchema: {
+        type: "object",
+        properties: withSpace({
+          id: { type: "string", description: "Page UUID" },
+          outline: {
+            type: "boolean",
+            description:
+              "Return only the heading tree — level, text and an anchor per heading — instead of the body. Use this first on a long page, then ask for one section.",
+          },
+          section: {
+            type: "string",
+            description:
+              "Return only one section: a heading's exact text, or the anchor that `outline` printed for it. The section runs from that heading to the next heading of the same or a higher level, so sub-headings come with it. A heading text that fits more than one heading is refused — pass its anchor instead.",
+          },
+        }),
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const c = await scoped(client, args);
+      return pageResult(c, async () => {
+        const id = String(args.id ?? "");
+        if (!id) throw new Error("id is required");
+        const wantOutline = args.outline === true;
+        const wantSection = typeof args.section === "string" && args.section.trim() !== "";
+        if (wantOutline && wantSection) {
+          throw new Error(
+            "Pass `outline: true` OR `section`, not both: the first asks what the page contains, " +
+              "the second asks for one part of it.",
+          );
+        }
+        const { page } = await c.getPage(id);
+        const open = pageOpenLines(c, page.id);
+
+        if (wantOutline) {
+          const headings = pageOutline(page.body);
+          const tree = headings.length
+            ? headings
+                .map(
+                  (h) =>
+                    `${"  ".repeat(h.level - 1)}${"#".repeat(h.level)} ${h.text}  (anchor: ${h.anchor})`,
+                )
+                .join("\n")
+            : "(no headings)";
+          return [
+            `# ${page.title} — outline`,
+            `Revision: ${page.revision}`,
+            "",
+            tree,
+            "",
+            ...open,
+          ].join("\n");
+        }
+
+        if (wantSection) {
+          const selector = String(args.section).trim();
+          const res = pageSection(page.body, selector);
+          if (!res.ok) {
+            const list = res.headings
+              .map((h) => `${"#".repeat(h.level)} ${h.text} (anchor: ${h.anchor})`)
+              .join("; ");
+            throw new Error(
+              res.reason === "ambiguous"
+                ? `More than one heading in this page is called "${selector}". Pass one of these ` +
+                  `anchors instead: ${list}`
+                : `This page has no section matching "${selector}". Its headings are: ` +
+                  `${list || "(none)"}. Pass a heading's exact text or its anchor.`,
+            );
+          }
+          return [
+            `# ${page.title} › ${res.heading.text}`,
+            `Revision: ${page.revision}`,
+            "",
+            res.text,
+            ...open,
+          ].join("\n");
+        }
+
+        const head = [
+          `# ${page.title}`,
+          `Revision: ${page.revision}`,
+          `Language: ${page.lang}`,
+          `Updated: ${page.updatedAt}`,
+        ];
+        const actor = pageActorLine(page);
+        if (actor) head.push(actor);
+        return [...head, "", page.body, "", ...open].join("\n");
+      });
+    },
+  );
+
+  server.registerTool(
+    "create_page",
+    {
+      description:
+        "Create a Markdown page in the workspace — a design write-up, a decision record, a runbook, " +
+        "the prose a diagram cannot carry. The title comes from the body (front-matter `title`, else " +
+        "the first top-level `#` heading), so begin the body with a heading rather than passing " +
+        "`title`. Embed a stored diagram by putting its id inside a fenced `diagramzu` block; an " +
+        "inline `mermaid` block is for a throwaway sketch nobody will revisit. Returns the page's id, " +
+        "its revision and its URL in the app, which only members of this workspace can open — pages " +
+        "have no public link yet.",
+      inputSchema: {
+        type: "object",
+        properties: withSpace({
+          body: {
+            type: "string",
+            description:
+              "The page's Markdown (≤100,000 chars, counted after line endings and Unicode are normalised — i.e. of the text you would read back).",
+          },
+          title: {
+            type: "string",
+            description:
+              "Optional display name (≤200 chars). The BODY wins: front-matter `title` or a leading `#` heading overrides this, which is why writing the heading is the better habit.",
+          },
+          folderId: {
+            type: "string",
+            description:
+              "Optional UUID of an existing folder to put the page in. Use list_folders to find one by name. Omit to place it at the workspace root.",
+          },
+          lang: {
+            type: "string",
+            description:
+              "Optional language tag for the page's prose — en, ja, zh-TW, pt-BR. Letters and hyphens only. Omit to inherit front-matter `lang`, else your account's language.",
+          },
+        }),
+        required: ["body"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const c = await scoped(client, args);
+      return pageResult(c, async () => {
+        if (typeof args.body !== "string" || args.body.trim() === "") {
+          throw new Error(
+            "`body` is required: a page is its Markdown. Start it with a `#` heading, which also " +
+              "becomes the page's title.",
+          );
+        }
+        const payload: { body: string; title?: string; folderId?: string; lang?: string } = {
+          body: args.body,
+        };
+        if (typeof args.title === "string") payload.title = args.title;
+        if (typeof args.folderId === "string") payload.folderId = args.folderId;
+        if (typeof args.lang === "string") payload.lang = args.lang;
+        const { page } = await c.createPage(payload);
+        return [
+          `Created page: ${page.id}`,
+          `Title: ${page.title}`,
+          `Revision: ${page.revision}`,
+          ...pageOpenLines(c, page.id),
+        ].join("\n");
+      });
+    },
+  );
+
+  server.registerTool(
+    "update_page",
+    {
+      description:
+        "Update a Markdown page. EXACTLY ONE body mode, and `edits` is the one to reach for: each " +
+        "edit replaces an `oldText` that must appear exactly once in the page, so a change to one " +
+        "paragraph never sends — or silently reverts — the rest of the document, and a concurrent " +
+        "edit by somebody else is re-applied to their new text instead of overwriting it. The other " +
+        "mode is `baseRevision` plus `body`, which replaces the whole document and needs the " +
+        "revision get_page reported. Changing only metadata (title, folderId, lang) needs neither. " +
+        "Returns the page's new revision and its URL in the app, which only members of this " +
+        "workspace can open — pages have no public link yet.",
+      inputSchema: {
+        type: "object",
+        properties: withSpace({
+          id: { type: "string", description: "Page UUID" },
+          edits: {
+            type: "array",
+            description:
+              "Targeted replacements, applied in order. Each `oldText` must match exactly once in the page as it then stands — zero or several matches refuses the whole call and writes nothing, naming the edit that failed. Do not pass `baseRevision` with this: the server's revision is read and re-read for you.",
+            items: {
+              type: "object",
+              properties: {
+                oldText: {
+                  type: "string",
+                  description:
+                    "The exact text to replace, copied from get_page. Include enough surrounding text to make it unique in the page.",
+                },
+                newText: { type: "string", description: "What to put in its place. May be empty to delete the span." },
+              },
+              required: ["oldText", "newText"],
+              additionalProperties: false,
+            },
+          },
+          baseRevision: {
+            type: "number",
+            description:
+              "The revision the replacement body is based on, from get_page. Required with `body`, forbidden with `edits`. If the page moved on since, the write is refused rather than applied on top.",
+          },
+          body: {
+            type: "string",
+            description:
+              "A complete replacement body (≤100,000 chars). Needs `baseRevision`. Prefer `edits` unless you are genuinely rewriting the whole document.",
+          },
+          title: {
+            type: "string",
+            description:
+              "Rename the page (≤200 chars). Ignored while the body carries front-matter `title` or a leading `#` heading — rename by editing the heading instead.",
+          },
+          folderId: {
+            type: "string",
+            description: "Move the page into this folder (UUID). Use list_folders to look one up.",
+          },
+          lang: {
+            type: "string",
+            description:
+              "Change the page's language tag — en, ja, zh-TW, pt-BR. Letters and hyphens only.",
+          },
+          createVersion: {
+            type: "boolean",
+            description:
+              "If true, take a named snapshot of the page as it is now BEFORE applying the change, so a human can get the previous text back. Use it when you are rewriting substantially.",
+          },
+          versionLabel: {
+            type: "string",
+            description: "Optional label for that snapshot (max 80 chars).",
+          },
+        }),
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+    async (args) => {
+      const c = await scoped(client, args);
+      return pageResult(c, async () => {
+        const id = String(args.id ?? "");
+        if (!id) throw new Error("id is required");
+
+        const hasBody = typeof args.body === "string";
+        const hasEdits = args.edits !== undefined && args.edits !== null;
+        const hasBase = typeof args.baseRevision === "number";
+
+        // THE MODE RULE, enforced here rather than in the schema: `buildServer`
+        // hands `inputSchema` to the client untouched and never validates
+        // `tools/call` arguments against it, so a `oneOf` would document the rule
+        // to clients that happen to validate and enforce it on nobody. Both
+        // field descriptions state it, and this is what makes it true.
+        if (hasBody && hasEdits) {
+          throw new Error(
+            "Pass EXACTLY ONE body mode: `edits` for targeted replacements, or `baseRevision` plus " +
+              "`body` to replace the whole page. Both were given, so nothing was written.",
+          );
+        }
+        if (hasBody && !hasBase) {
+          throw new Error(
+            "Replacing the whole body needs `baseRevision`, the revision get_page reported, so that " +
+              "a change somebody else made in the meantime is refused rather than overwritten. " +
+              "Nothing was written.",
+          );
+        }
+        if (hasEdits && hasBase) {
+          throw new Error(
+            "Do not pass `baseRevision` with `edits`: the edits mode reads the page's revision " +
+              "itself, and re-reads it if another writer lands first. Nothing was written.",
+          );
+        }
+
+        // Metadata rides along with either mode, or travels alone.
+        const meta: { title?: string; folderId?: string; lang?: string } = {};
+        if (typeof args.title === "string") meta.title = args.title;
+        if (typeof args.folderId === "string") meta.folderId = args.folderId;
+        if (typeof args.lang === "string") meta.lang = args.lang;
+
+        if (!hasBody && !hasEdits && Object.keys(meta).length === 0) {
+          throw new Error(
+            "Nothing to update. Pass `edits`, or `baseRevision` + `body`, or at least one of " +
+              "title, folderId or lang.",
+          );
+        }
+
+        const label = typeof args.versionLabel === "string" ? args.versionLabel : undefined;
+        const wantSnapshot = args.createVersion === true;
+        const notes: string[] = [];
+        let snapshotId: string | undefined;
+
+        // The snapshot is a SEPARATE call that must precede the write, because
+        // card 162's PATCH takes no snapshot flags (and decodes with
+        // DisallowUnknownFields, so sending one is a 400). If it is refused the
+        // whole call is refused: the agent asked for the previous text to be
+        // kept, and writing without it loses exactly what it wanted kept.
+        const snapshot = async () => {
+          if (!wantSnapshot) return;
+          const { version } = await c.createPageSnapshot(id, label);
+          snapshotId = version.id;
+        };
+
+        let page: Page;
+        let versionId: string | undefined;
+
+        if (hasEdits) {
+          const edits = parseEdits(args.edits);
+          const got = await c.getPage(id);
+          const firstText = applyEditsOrRefuse(got.page.body, edits, "first");
+          await snapshot();
+          try {
+            const res = await c.patchPage(id, {
+              baseRevision: got.page.revision,
+              body: firstText,
+              ...meta,
+            });
+            page = res.page;
+            versionId = res.versionId;
+          } catch (e) {
+            // D1(b)4 — THE ONE RETRY. It proceeds only if every `oldText` still
+            // matches exactly once in the NEW body; applyEditsOrRefuse("retry")
+            // is what refuses otherwise, and it writes nothing. There is no
+            // second retry (D1(b)5): a loop here is an unbounded write race
+            // nobody can see from the outside.
+            const current = conflictCurrent(e);
+            const isConflict =
+              e instanceof DiagramzuApiError && e.status === 409 && e.token === "revision_conflict";
+            if (!isConflict) throw e;
+            // `current` comes with the 409 (card 162 sends it so a client can
+            // show a diff without a second round trip) and is the exact state
+            // that refused the write — body and revision from one snapshot. A
+            // re-GET is the fallback for an API that did not send it.
+            const fresh = current ?? (await c.getPage(id)).page;
+            const retryText = applyEditsOrRefuse(fresh.body, edits, "retry");
+            const res = await c.patchPage(id, {
+              baseRevision: fresh.revision,
+              body: retryText,
+              ...meta,
+            });
+            page = res.page;
+            versionId = res.versionId;
+            notes.push(
+              "Another writer changed the page first, so the edits were re-applied to their new " +
+                "text — their change is intact.",
+            );
+          }
+          notes.unshift(`Applied ${edits.length} edit${edits.length === 1 ? "" : "s"}.`);
+        } else if (hasBody) {
+          await snapshot();
+          const res = await c.patchPage(id, {
+            baseRevision: args.baseRevision as number,
+            body: args.body as string,
+            ...meta,
+          });
+          page = res.page;
+          versionId = res.versionId;
+        } else {
+          await snapshot();
+          const res = await c.patchPage(id, { ...meta });
+          page = res.page;
+          versionId = res.versionId;
+        }
+
+        const lines = [
+          `Updated page: ${page.id}`,
+          `Title: ${page.title}`,
+          `Revision: ${page.revision}`,
+          ...notes,
+        ];
+        // Either snapshot is worth naming: the one the agent asked for, and the
+        // one go-api took by itself when the writer changed.
+        if (snapshotId) lines.push(`Snapshot: ${snapshotId}`);
+        if (versionId && versionId !== snapshotId) lines.push(`Snapshot: ${versionId}`);
+        lines.push(...pageOpenLines(c, page.id));
+        return lines.join("\n");
+      });
     },
   );
 }

@@ -4,7 +4,7 @@
 // here; importing this module has NO side effects (no env reads, no process.exit,
 // no transport connect).
 export { buildServer } from "./buildServer.js";
-export { DiagramzuClient } from "./client.js";
+export { DiagramzuApiError, DiagramzuClient } from "./client.js";
 export type {
   DiagramzuConfig,
   Actor,
@@ -16,9 +16,14 @@ export type {
   DeckDetail,
   CreateDeckInput,
   UpdateDeckInput,
+  Page,
+  PageSummary,
+  PageVersionRef,
   TokenSpace,
 } from "./client.js";
 export { registerTools } from "./tools.js";
+export { applyPageEdits, normalizePageText, pageOutline, pageSection } from "./pageText.js";
+export type { EditResult, PageEdit, PageHeading, SectionResult } from "./pageText.js";
 export { SERVER_INSTRUCTIONS } from "./instructions.js";
 export { resolveSpace, describeSpaces } from "./spaceResolver.js";
 export type { SpaceResolution } from "./spaceResolver.js";
