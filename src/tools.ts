@@ -235,6 +235,18 @@ const CONFLICT_ADVICE =
  */
 const PAGE_EDIT_ATTEMPTS = 2;
 
+/**
+ * The number of rows go-api's page list can return — `pageListLimit` in
+ * services/go-api/internal/handlers/pages.go, which is a fixed `LIMIT 200` with
+ * no cursor and no offset.
+ *
+ * Mirrored here ONLY to tell the agent when the list it is holding is full, so
+ * "N pages" is never read as "the whole workspace". If the two ever drift, the
+ * failure is a missing warning, never a wrong list — this number decides no
+ * request and truncates nothing.
+ */
+const PAGE_LIST_CAP = 200;
+
 function explainPageFailure(err: unknown): PageFailure {
   if (!(err instanceof DiagramzuApiError)) return null;
   const token = err.token;
@@ -1234,7 +1246,21 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
           return snippet ? [head, `    ${snippet}`] : [head];
         });
         const summary = `${pages.length} page${pages.length === 1 ? "" : "s"}`;
-        return [summary, ...lines].join("\n");
+        // SAY SO WHEN THE LIST IS FULL. go-api's ListPages is a fixed
+        // `LIMIT 200` with no cursor and no offset (pages.go#pageListLimit), so
+        // a full page of results means "at least this many", not "this many" —
+        // and this tool's own description tells an agent to call it BEFORE
+        // create_page precisely to avoid a duplicate. An agent that read "200
+        // pages" as the whole workspace and wrote a second copy of a page it
+        // could not see would be acting correctly on a number we stated wrongly.
+        const truncated = pages.length >= PAGE_LIST_CAP;
+        return [
+          truncated ? `${summary} (the most this list returns — there may be more)` : summary,
+          ...lines,
+          ...(truncated
+            ? ["", "Narrow with `q` or `folderId` to see pages beyond this point."]
+            : []),
+        ].join("\n");
       });
     },
   );
