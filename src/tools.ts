@@ -1326,8 +1326,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
       description:
         "Fetch one Markdown page by id. Returns its body, its `revision` — pass that as " +
         "`baseRevision` when replacing the whole body — its language, who edited it last, and its " +
-        "URL in the app, which only members of this workspace can open. Pages have no public link " +
-        "yet, so there is no shareable address to hand out. For a long document prefer " +
+        "URL in the app, which only members of this workspace can open. To let somebody outside " +
+        "the workspace read it, a person in the workspace opens the page in DiagramZu and uses " +
+        "its Share button, which mints a public read-only link. For a long document prefer " +
         "`outline: true` (the heading tree, with an anchor per heading) and then " +
         "`section: '<heading text or anchor>'` for just the part you need.",
       inputSchema: {
@@ -1431,8 +1432,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         "the first top-level `#` heading), so begin the body with a heading rather than passing " +
         "`title`. Embed a stored diagram by putting its id inside a fenced `diagramzu` block; an " +
         "inline `mermaid` block is for a throwaway sketch nobody will revisit. Returns the page's id, " +
-        "its revision and its URL in the app, which only members of this workspace can open — pages " +
-        "have no public link yet.",
+        "its revision and its URL in the app, which only members of this workspace can open. To let " +
+        "somebody outside the workspace read it, a person in the workspace opens the page in " +
+        "DiagramZu and uses its Share button, which mints a public read-only link.",
       inputSchema: {
         type: "object",
         properties: withSpace({
@@ -1499,7 +1501,9 @@ export function registerTools(server: ToolRegistry, client: DiagramzuClient): vo
         "mode is `baseRevision` plus `body`, which replaces the whole document and needs the " +
         "revision get_page reported. Changing only metadata (title, folderId, lang) needs neither. " +
         "Returns the page's new revision and its URL in the app, which only members of this " +
-        "workspace can open — pages have no public link yet.",
+        "workspace can open. To let somebody outside the workspace read it, a person in the " +
+        "workspace opens the page in DiagramZu and uses its Share button, which mints a public " +
+        "read-only link.",
       inputSchema: {
         type: "object",
         properties: withSpace({

@@ -106,22 +106,25 @@ someone outside your Space:
 | `diagramzu.ai/app/pages/<id>` | Space members only — the Markdown page in the app. |
 | `diagramzu.ai/s/<slug>` | Anyone with the link — the public, read-only diagram page. |
 | `diagramzu.ai/s/p/<slug>` | Anyone with the link — the public, read-only deck. |
+| `diagramzu.ai/s/pg/<slug>` | Anyone with the link — the public, read-only Markdown page. |
 
 The tools hand back the `/app/…` URLs, so a link pasted straight out of a chat is
 a members-only one: send it to someone outside the Space and they land on
-sign-in. To publish, open the diagram or deck in DiagramZu and use its Share
-button. **This MCP server deliberately ships no tool that mints a public link** —
-not because a token cannot (a `dz_live_…` token can mint one over the REST API),
-but because publishing a Space's content should be a deliberate human action
-rather than a side effect of a conversation. Once a diagram has a public link,
-`get_diagram` and `update_diagram` report it on a `Share (public, read-only):`
-line of their own.
+sign-in. To publish, open the diagram, deck or page in DiagramZu and use its
+Share button. **This MCP server deliberately ships no tool that mints a public
+link** — not because a token cannot (a `dz_live_…` token can mint one over the
+REST API), but because publishing a Space's content should be a deliberate human
+action rather than a side effect of a conversation. Once a diagram has a public
+link, `get_diagram` and `update_diagram` report it on a
+`Share (public, read-only):` line of their own.
 
-**Pages have no public link at all yet.** There is no `/s/`-style address for a
-Markdown page and no Share button for one, so `get_page`, `create_page` and
-`update_page` print only the members-only `/app/pages/<id>` URL and say so. When
-a public page link ships, it will be minted the same way — by a person, from the
-page in DiagramZu.
+**A Markdown page is shared the same way.** `diagramzu.ai/s/pg/<slug>` is its
+public, read-only address, minted by a person from the page's Share button, so
+`get_page`, `create_page` and `update_page` print the members-only
+`/app/pages/<id>` URL and point at that button for anything wider. They do NOT
+look a page's link up: unlike `get_diagram` they report no
+`Share (public, read-only):` line, so a page's public address is something a
+human hands over, not something an agent discovers.
 
 ## Show off your setup
 
